@@ -21,6 +21,7 @@ in
             hm.shell
             hm.neovim
             hm.gnupg
+            hm.lazysql
 
             # Development
             hm."dev/common"
