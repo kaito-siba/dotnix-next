@@ -31,10 +31,8 @@ in
 
             # Desktop applications
             hm.appcleaner
-            hm.hidden-bar
             hm.iina
             hm.scroll-reverser
-            hm.shottr
 
             # Development
             hm."dev/common"
