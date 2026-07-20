@@ -7,8 +7,6 @@
         format = "dotenv";
       };
 
-      # tailnet の他ホストから wain:8888 で叩けるように、tailscale0 経由でのみ
-      # 8888 を開放する（LAN/WAN には露出させない）。
       networking.firewall.interfaces."tailscale0".allowedTCPPorts = [ 8888 ];
 
       services.searx = {
@@ -18,13 +16,9 @@
         settings = {
           server = {
             port = 8888;
-            # 0.0.0.0 でリッスンするが、上の firewall 設定で実際に到達できるのは
-            # tailscale0 経由のみ。
             bind_address = "0.0.0.0";
             secret_key = "@SEARX_SECRET_KEY@";
           };
-          # ahmia/torch は Tor プロキシ必須、radio browser はキャッシュ DB の
-          # 初期化に失敗して登録できないため、いずれも無効化しておく。
           engines = [
             {
               name = "ahmia";
