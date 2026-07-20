@@ -15,6 +15,12 @@
       };
     };
 
+    # After changing the config, restart the service:
+    #   brew services restart sketchybar
+    # Do NOT use `sketchybar --reload`: with the config symlinked into the
+    # store it resets the bar to defaults and then silently fails to re-run
+    # the config, leaving an empty bar. Executing the config at daemon
+    # startup works fine.
     homeManager.desktop =
       { pkgs, lib, ... }:
       lib.mkIf pkgs.stdenv.isDarwin {

@@ -237,17 +237,17 @@ brackets=(
   background.border_width=3
 )
 
-sketchybar --add bracket status time date wifi battery volume_icon right \
+sketchybar --add bracket status time date wifi battery volume_icon \
   --set status "${brackets[@]!}"
 
-sketchybar --add bracket music spotify spotify_label e \
+sketchybar --add bracket music spotify spotify_label \
   --set music "${brackets[@]!}" \
   background.padding_right=50
 
-sketchybar --add bracket control apple center \
+sketchybar --add bracket control apple \
   --set control "${brackets[@]!}"
 
-sketchybar --add bracket utilis ram cpu q \
+sketchybar --add bracket utilis ram cpu \
   --set utilis "${brackets[@]!}" \
   background.padding_left=50
 
