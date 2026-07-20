@@ -10,7 +10,7 @@ mode = "dark"
 
 [borders]
 enabled = true
-width = 5.0
+width = 3.0
 
 [borders.color]
 alpha = 1.0
@@ -44,10 +44,10 @@ moveMouseToFocusedWindow = true
 size = 10.0
 
 [gaps.outer]
-bottom = 10.0
-left = 10.0
-right = 10.0
-top = 10.0
+bottom = 5.0
+left = 5.0
+right = 5.0
+top = 5.0
 
 [general]
 animationsEnabled = true
