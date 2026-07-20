@@ -9,6 +9,7 @@ in
       [
         base
         homebrew
+        hammerspoon
 
         # Users
         w963n
