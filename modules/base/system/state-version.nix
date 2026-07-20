@@ -10,6 +10,12 @@
         };
       };
 
+      # nix-darwin tracks its own integer state version, unrelated to the
+      # nixpkgs release string used by NixOS and home-manager.
+      darwin.base = {
+        system.stateVersion = 6;
+      };
+
       homeManager.base = {
         home = {
           inherit stateVersion;

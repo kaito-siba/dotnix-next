@@ -9,11 +9,7 @@
       _module.args.pkgs = import inputs.nixpkgs {
         inherit system;
 
-	      config.allowUnfreePredicate = predicate;
-
-	      overlays = [
-          inputs.nix-openclaw.overlays.default
-        ];
+        config.allowUnfreePredicate = predicate;
       };
     };
 }

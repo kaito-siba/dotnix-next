@@ -1,8 +1,8 @@
 keys:
-  - &radiata-mobile-admin age1zhh4jqkn8cqyjekwu0ptxsuvqcahlhy74zfy8d7dy9zzckzj5utse96hf3
+  - &squamigera-admin age1zhh4jqkn8cqyjekwu0ptxsuvqcahlhy74zfy8d7dy9zzckzj5utse96hf3
   - &nois-ark age1d7zl8mnr7v8rdqprchh8vg2vchr4xs4r5yqpwp6jca2c7m3sefuqxumxwz
 
 creation_rules:
   - path_regex: modules/searxng/secrets/.*
     key_groups:
-      - age: [ *nois-ark, *radiata-mobile-admin ]
+      - age: [ *nois-ark, *squamigera-admin ]

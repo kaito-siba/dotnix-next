@@ -30,5 +30,22 @@
           config.flake.meta.users.w963n.username
         ];
       };
+
+    # The macOS account already exists and is created outside Nix, so this only
+    # describes it. description is deliberately left alone: macOS owns RealName.
+    modules.darwin.w963n =
+      { pkgs, ... }:
+      {
+        users.users.w963n = {
+          home = "/Users/${config.flake.meta.users.w963n.username}";
+          shell = pkgs.zsh;
+        };
+
+        programs.zsh.enable = true;
+
+        nix.settings.trusted-users = [
+          config.flake.meta.users.w963n.username
+        ];
+      };
   };
 }
