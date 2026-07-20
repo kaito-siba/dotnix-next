@@ -19,6 +19,7 @@ in
             hm.base
             hm.shell
             hm.neovim
+            hm.gnupg
 
             # Development
             hm."dev/common"
