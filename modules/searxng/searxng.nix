@@ -1,5 +1,14 @@
+{ config, lib, ... }:
+let
+  serverPort = config.services.searx.serverPort;
+in
 {
-  flake.modules.nixos.searxng =
+  options.services.searx.serverPort = lib.mkOption {
+    type = lib.types.int;
+    default = 8888;
+  };
+
+  config.flake.modules.nixos.searxng =
     { config, pkgs, ... }:
     {
       sops.secrets."searxng-env" = {
@@ -7,15 +16,13 @@
         format = "dotenv";
       };
 
-      networking.firewall.interfaces."tailscale0".allowedTCPPorts = [ 8888 ];
-
       services.searx = {
         enable = true;
         package = pkgs.searxng;
         environmentFile = config.sops.secrets."searxng-env".path;
         settings = {
           server = {
-            port = 8888;
+            port = serverPort;
             bind_address = "0.0.0.0";
             secret_key = "@SEARXING_SECRET_KEY@";
           };
