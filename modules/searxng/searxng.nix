@@ -17,7 +17,7 @@
           server = {
             port = 8888;
             bind_address = "0.0.0.0";
-            secret_key = "@SEARX_SECRET_KEY@";
+            secret_key = "@SEARXING_SECRET_KEY@";
           };
           engines = [
             {
