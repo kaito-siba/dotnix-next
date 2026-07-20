@@ -24,7 +24,7 @@ mode = "scrolling"
 
 [settings.layout.gaps.outer]
 # top leaves room for sketchybar, as the aerospace config did.
-top = 40
+top = 10
 left = 10
 bottom = 10
 right = 10
