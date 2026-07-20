@@ -10,7 +10,6 @@ in
         base
         homebrew
         desktop
-        hammerspoon
         fonts
         photography
         tailscale
@@ -22,6 +21,7 @@ in
         {
           home-manager.users.w963n.imports = [
             hm.base
+            hm.desktop
             hm.shell
             hm.neovim
             hm.gnupg
