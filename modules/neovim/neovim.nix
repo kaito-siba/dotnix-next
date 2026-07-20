@@ -32,6 +32,10 @@
         withPerl = false;
       };
 
+      programs.zsh.shellAliases = {
+        v = "nvim";
+      };
+
       xdg.configFile."nvim" = {
         source = ./config;
         recursive = true;
