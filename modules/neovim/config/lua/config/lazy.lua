@@ -18,7 +18,9 @@ require("lazy").setup({
   spec = {
     -- add LazyVim and import its plugins
     { "LazyVim/LazyVim", import = "lazyvim.plugins" },
-    -- import/override with your plugins
+    -- import/override with your plugins, including the lang-*.lua files that
+    -- pull in LazyVim extras. Those are host independent: servers whose binary
+    -- is not on PATH are skipped, so the matching dev/* nix module is optional.
     { import = "plugins" },
   },
   defaults = {
@@ -31,6 +33,8 @@ require("lazy").setup({
     -- version = "*", -- try installing the latest stable version for plugins that support semver
   },
   install = { colorscheme = { "tokyonight", "habamax" } },
+  -- the config dir is a read-only nix store path, so the lockfile cannot live there
+  lockfile = vim.fn.stdpath("data") .. "/lazy-lock.json",
   checker = {
     enabled = true, -- check for plugin updates periodically
     notify = false, -- notify on update

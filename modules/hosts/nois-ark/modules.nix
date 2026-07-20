@@ -1,4 +1,7 @@
 { config, ... }:
+let
+  hm = config.flake.modules.homeManager;
+in
 {
   flake.modules.nixos."hosts/nois-ark" = {
     imports =
@@ -16,10 +19,17 @@
       ]
       ++ [
         {
-          home-manager.users.root.imports = with config.flake.modules.homeManager; [
-            base
-            shell
-            neovim
+          home-manager.users.root.imports = [
+            hm.base
+            hm.shell
+            hm.neovim
+
+            # Development
+            hm."dev/common"
+            hm."dev/nix"
+            hm."dev/rust"
+            hm."dev/web"
+            hm."dev/python"
           ];
         }
       ];
