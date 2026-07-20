@@ -74,7 +74,6 @@
           # Notes and knowledge
           "anki"
           "notion"
-          "obsidian"
 
           # Media
           "iina"
@@ -108,13 +107,6 @@
 
           # AI
           "claude"
-
-          # Fonts
-          "font-fira-code-nerd-font"
-          "font-hack-nerd-font"
-          "font-meslo-lg-nerd-font"
-          "font-ricty-diminished"
-          "font-symbols-only-nerd-font"
         ];
       };
 

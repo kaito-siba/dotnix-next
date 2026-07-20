@@ -10,6 +10,7 @@ in
         base
         homebrew
         hammerspoon
+        fonts
 
         # Users
         w963n
@@ -22,6 +23,7 @@ in
             hm.neovim
             hm.gnupg
             hm.lazysql
+            hm.obsidian
 
             # Development
             hm."dev/common"
