@@ -32,7 +32,6 @@ in
             # Desktop applications
             hm.appcleaner
             hm.iina
-            hm.scroll-reverser
 
             # Development
             hm."dev/common"

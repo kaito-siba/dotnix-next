@@ -15,11 +15,13 @@
       };
     };
 
-    homeManager.desktop = {
-      xdg.configFile."sketchybar" = {
-        source = ./config;
-        recursive = true;
+    homeManager.desktop =
+      { pkgs, lib, ... }:
+      lib.mkIf pkgs.stdenv.isDarwin {
+        xdg.configFile."sketchybar" = {
+          source = ./config;
+          recursive = true;
+        };
       };
-    };
   };
 }
