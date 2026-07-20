@@ -58,6 +58,25 @@ preserve_focus_per_workspace = true
 # aerospace: ctrl-space toggled back and forth; here any Alt+N re-press does.
 workspace_auto_back_and_forth = true
 
+# App placement, carried over from the aerospace on-window-detected rules.
+# Workspace indices are 0-based: 0 = "1" (terminal), etc. The floating
+# Picture-in-Picture rules come first in case matching is first-wins.
+app_rules = [
+  { app_id = "app.zen-browser.zen", title_substring = "Picture-in-Picture", floating = true },
+  { app_id = "app.zen-browser.zen", title_substring = "ピクチャーインピクチャー", floating = true },
+  { app_id = "org.mozilla.firefox", title_substring = "Picture-in-Picture", floating = true },
+  { app_id = "org.mozilla.firefox", title_substring = "ピクチャーインピクチャー", floating = true },
+
+  { app_id = "com.github.wez.wezterm", workspace = 0 },
+  { app_id = "app.zen-browser.zen", workspace = 1 },
+  { app_id = "md.obsidian", workspace = 2 },
+  { app_id = "com.tinyspeck.slackmacgap", workspace = 3 },
+  { app_id = "notion.id", workspace = 4 },
+  { app_id = "com.spotify.client", workspace = 5 },
+  { app_id = "com.hnc.Discord", workspace = 6 },
+  { app_id = "com.toggl.daneel", workspace = 7 },
+]
+
 [keys]
 "Alt + Z" = "toggle_space_activated"
 
@@ -117,48 +136,3 @@ workspace_auto_back_and_forth = true
 
 # No rift equivalents yet: close-window (Cmd+W territory on macOS),
 # center-column, preset-width cycling.
-
-# App placement, carried over from the aerospace on-window-detected rules.
-# Workspace indices are 0-based: 0 = "1" (terminal), etc.
-[[app_rules]]
-app_id = "com.github.wez.wezterm"
-workspace = 0
-
-[[app_rules]]
-app_id = "app.zen-browser.zen"
-workspace = 1
-
-[[app_rules]]
-app_id = "md.obsidian"
-workspace = 2
-
-[[app_rules]]
-app_id = "com.tinyspeck.slackmacgap"
-workspace = 3
-
-[[app_rules]]
-app_id = "notion.id"
-workspace = 4
-
-[[app_rules]]
-app_id = "com.spotify.client"
-workspace = 5
-
-[[app_rules]]
-app_id = "com.hnc.Discord"
-workspace = 6
-
-[[app_rules]]
-app_id = "com.toggl.daneel"
-workspace = 7
-
-# Picture-in-Picture floats, in both languages, as in niri and aerospace.
-[[app_rules]]
-app_id = "app.zen-browser.zen"
-title_regex = "Picture-in-Picture|ピクチャーインピクチャー"
-floating = true
-
-[[app_rules]]
-app_id = "org.mozilla.firefox"
-title_regex = "Picture-in-Picture|ピクチャーインピクチャー"
-floating = true
