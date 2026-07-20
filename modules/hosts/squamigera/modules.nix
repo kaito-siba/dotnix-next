@@ -24,7 +24,6 @@ in
             hm.desktop
             hm.shell
             hm.neovim
-            hm.gnupg
             hm.lazysql
             hm.obsidian
             hm.ghostty
