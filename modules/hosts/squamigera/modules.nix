@@ -9,8 +9,11 @@ in
       [
         base
         homebrew
+        desktop
         hammerspoon
         fonts
+        photography
+        tailscale
 
         # Users
         w963n

@@ -2,6 +2,12 @@
   # Homebrew keeps managing GUI applications: casks that ship system extensions,
   # login items or Sparkle updaters do not survive being rebuilt from nixpkgs.
   # Everything reachable from a terminal should come from nix instead.
+  #
+  # Two things live here: the machinery, and an inventory of applications that
+  # are only an install -- no settings, no second platform, no siblings. The
+  # moment one grows any of those it graduates to its own module, the way
+  # obsidian, ghostty and the desktop session did. Taps and casks contributed
+  # by those modules merge into the same Brewfile.
   flake.modules.darwin.homebrew =
     { lib, ... }:
     {
@@ -26,36 +32,16 @@
         # over -- the trust has to be in the Brewfile that nix-darwin generates.
         taps = [
           {
-            name = "felixkratz/formulae";
-            trusted = true;
-          }
-          {
-            name = "nikitabobko/tap";
-            trusted = true;
-          }
-          {
-            name = "lihaoyun6/tap";
+            name = "lihaoyun6/tap"; # quickrecorder
             trusted = true;
           }
         ];
 
         brews = [
           "mas" # Mac App Store CLI, has no nixpkgs equivalent
-
-          # The desktop shell around aerospace. Both are menu-bar/overlay
-          # daemons from a tap and have no nixpkgs packages.
-          "borders"
-          "sketchybar"
         ];
 
         casks = [
-          # Window management and input
-          "aerospace"
-          "hammerspoon"
-          "karabiner-elements"
-          "keyboardcleantool"
-          "raycast"
-
           # Terminals. ghostty comes from nixpkgs (modules/ghostty); this one
           # stays a cask because it deliberately tracks nightly.
           "wezterm@nightly"
@@ -77,18 +63,8 @@
           "spotify"
           "quickrecorder"
 
-          # Photography. rawtherapee's nixpkgs meta claims darwin support, but
-          # its dependency chain pulls in libselinux and fails to evaluate.
-          "amazon-photos"
-          "fujifilm-x-raw-studio"
-          "rawtherapee"
-
           # Design
           "figma"
-
-          # Input methods and audio routing
-          "google-japanese-ime"
-          "blackhole-16ch"
 
           # Hardware and peripherals
           "fujitsu-scansnap-home"
@@ -96,9 +72,6 @@
 
           # Utilities
           "smoothcsv"
-
-          # Networking
-          "tailscale-app"
 
           # AI
           "claude"
