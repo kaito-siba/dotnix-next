@@ -14,7 +14,10 @@ source "$HOME/.config/sketchybar/icons.sh"
 PLUGIN_DIR="$HOME/.config/sketchybar/plugins"
 SPOTIFY_EVENT="com.spotify.client.PlaybackStateChanged"
 POPUP_CLICK_SCRIPT="sketchybar --set \$NAME popup.drawing=toggle"
-ACTIVE_SPACE=$(aerospace list-workspaces --focused)
+# TODO(rift): the spaces widget predates even aerospace -- spaces.sh and the
+# click_script below still call yabai. Rewire the whole widget against
+# rift-cli once rift is installed and its CLI can be inspected.
+ACTIVE_SPACE=$(aerospace list-workspaces --focused 2>/dev/null || echo 1)
 SPACE_ICONS=("$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST")
 
 # Color definitions
