@@ -3,10 +3,13 @@
 source "$HOME/.config/sketchybar/colors.sh"
 source "$HOME/.config/sketchybar/icons.sh"
 
-SPACE_ICONS=("$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST")
+SPACE_ICONS=("$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST")
 CURRENT_SPACE_ICONS=("$WORK" "$BROWSER" "$UNI" "$MUSIC" "$MAIL" "$GENERAL" "$GENERAL" "$GENERAL" "$GENERAL")
-ACTIVE_SPACE=$(yabai -m query --spaces --space | jq '.index')
-CURRENT_APP_IN_SPACE=$(osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true')
+
+# OmniWM's virtual workspaces are named "1".."9"; tr guards against the query
+# growing decoration around the name. Bail quietly while OmniWM is not up.
+ACTIVE_SPACE=$(omniwmctl query active-workspace --fields name --format tsv 2>/dev/null | tail -n1 | tr -cd '0-9')
+[ -z "$ACTIVE_SPACE" ] && exit 0
 
 space_bg=(
   background.color=$SPACEBG

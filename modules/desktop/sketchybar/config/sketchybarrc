@@ -14,11 +14,9 @@ source "$HOME/.config/sketchybar/icons.sh"
 PLUGIN_DIR="$HOME/.config/sketchybar/plugins"
 SPOTIFY_EVENT="com.spotify.client.PlaybackStateChanged"
 POPUP_CLICK_SCRIPT="sketchybar --set \$NAME popup.drawing=toggle"
-# TODO(rift): the spaces widget predates even aerospace -- spaces.sh and the
-# click_script below still call yabai. Rewire the whole widget against
-# rift-cli once rift is installed and its CLI can be inspected.
-ACTIVE_SPACE=$(aerospace list-workspaces --focused 2>/dev/null || echo 1)
-SPACE_ICONS=("$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST")
+# Workspaces come from OmniWM's virtual workspaces ("1".."9"), queried and
+# driven through omniwmctl. spaces.sh owns the active-workspace state.
+SPACE_ICONS=("$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST" "$GHOST")
 
 # Color definitions
 
@@ -246,27 +244,23 @@ space_bg=(
   background.corner_radius=50
 )
 
+# OmniWM pushes workspace changes through this event via the watcher below;
+# update_freq stays as a fallback for missed events.
+sketchybar --add event omniwm_workspace_change
+
 declare -a spacesArray=()
 for i in "${!SPACE_ICONS[@]}"; do
   sid=$(($i + 1))
 
-  if [[ $sid -eq $ACTIVE_SPACE ]]; then
-    CURRENT_ICON=$PACMAN
-  else
-    CURRENT_ICON=${SPACE_ICONS["$i"]}
-  fi
-
   spacesArray+=("space.$sid")
 
-  sketchybar --add space space.$sid left \
-    --set space.$sid associated_space=$sid \
-    icon="$CURRENT_ICON" \
-    click_script="yabai -m space --focus $sid" \
-    "${space[@]}"
-
-  if [[ $sid -eq $ACTIVE_SPACE ]]; then
-    sketchybar --set space.$sid "${space_bg[@]}"
-  fi
+  # --add item, not --add space: these are OmniWM virtual workspaces living on
+  # one native space, so associated_space does not apply.
+  sketchybar --add item space.$sid left \
+    --set space.$sid icon="${SPACE_ICONS[$i]}" \
+    click_script="omniwmctl workspace focus-name $sid" \
+    "${space[@]}" \
+    --subscribe space.$sid omniwm_workspace_change
 done
 
 current_space=(
@@ -307,3 +301,14 @@ sketchybar --add bracket utilis ram cpu q \
   background.padding_left=50
 
 sketchybar --update
+
+# Nudge the spaces widget the moment OmniWM switches workspaces. Restarted
+# here so a sketchybar reload never stacks watchers.
+pkill -f "omniwmctl watch active-workspace" 2>/dev/null
+(
+  while :; do
+    omniwmctl watch active-workspace --no-send-initial \
+      --exec sketchybar --trigger omniwm_workspace_change
+    sleep 5
+  done
+) >/dev/null 2>&1 &
