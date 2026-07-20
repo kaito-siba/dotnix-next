@@ -8,6 +8,10 @@
         plugins = with pkgs.vimPlugins; [
           nvim-lspconfig
         ];
+        withPython3 = false;
+        withNodeJs = false;
+        withRuby = false;
+        withPerl = false;
       };
 
       xdg.configFile."nvim" = {
