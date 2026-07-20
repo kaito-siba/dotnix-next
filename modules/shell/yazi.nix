@@ -10,6 +10,17 @@
       };
     in
     {
+      # Previewers yazi shells out to. Without these it falls back to plain
+      # text for images, PDFs, video and archives.
+      home.packages = with pkgs; [
+        chafa
+        exiftool
+        ffmpeg
+        imagemagick
+        poppler-utils
+        _7zz
+      ];
+
       programs.yazi = {
         enable = true;
         enableZshIntegration = true;

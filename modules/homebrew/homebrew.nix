@@ -8,27 +8,45 @@
       homebrew = {
         enable = true;
 
-        # Declared state is the whole state: anything installed by hand and not
-        # listed here is uninstalled on activation. "uninstall" rather than
-        # "zap" so removal never takes an application's data with it.
-        #
         # Updating is left to the casks themselves -- nearly all of them carry
         # Sparkle, which is the reason they are casks and not nix packages --
         # so activation stays fast and does not reach out to the network.
+        #
+        # TRANSITIONAL: cleanup is "none" while this machine still has a large
+        # hand-installed brew tree. Switch it to "uninstall" (not "zap", so
+        # removal never takes an application's data with it) once the nix side
+        # has been confirmed working, and the leftovers will be pruned then.
         onActivation = {
           autoUpdate = false;
-          cleanup = "uninstall";
+          cleanup = "none";
           upgrade = false;
         };
 
+        # Homebrew 6 refuses to load anything from an untrusted third-party tap
+        # during activation, and `brew trust` on the command line does not carry
+        # over -- the trust has to be in the Brewfile that nix-darwin generates.
         taps = [
-          "felixkratz/formulae" # borders, sketchybar
-          "nikitabobko/tap" # aerospace
-          "lihaoyun6/tap" # quickrecorder
+          {
+            name = "felixkratz/formulae";
+            trusted = true;
+          }
+          {
+            name = "nikitabobko/tap";
+            trusted = true;
+          }
+          {
+            name = "lihaoyun6/tap";
+            trusted = true;
+          }
         ];
 
         brews = [
           "mas" # Mac App Store CLI, has no nixpkgs equivalent
+
+          # The desktop shell around aerospace. Both are menu-bar/overlay
+          # daemons from a tap and have no nixpkgs packages.
+          "borders"
+          "sketchybar"
         ];
 
         casks = [
