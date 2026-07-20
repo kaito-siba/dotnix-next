@@ -12,13 +12,12 @@
         # Sparkle, which is the reason they are casks and not nix packages --
         # so activation stays fast and does not reach out to the network.
         #
-        # TRANSITIONAL: cleanup is "none" while this machine still has a large
-        # hand-installed brew tree. Switch it to "uninstall" (not "zap", so
-        # removal never takes an application's data with it) once the nix side
-        # has been confirmed working, and the leftovers will be pruned then.
+        # Declared state is the whole state: anything installed by hand and not
+        # listed here is uninstalled on activation. "uninstall" rather than
+        # "zap" so removal never takes an application's data with it.
         onActivation = {
           autoUpdate = false;
-          cleanup = "none";
+          cleanup = "uninstall";
           upgrade = false;
         };
 
