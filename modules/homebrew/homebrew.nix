@@ -27,16 +27,10 @@
           upgrade = false;
         };
 
-        # Homebrew 6 refuses to load anything from an untrusted third-party tap
-        # during activation, and `brew trust` on the command line does not carry
-        # over -- the trust has to be in the Brewfile that nix-darwin generates.
-        taps = [
-          {
-            name = "lihaoyun6/tap"; # quickrecorder
-            trusted = true;
-          }
-        ];
-
+        # Third-party taps are declared by the modules that consume them, with
+        # trusted = true: Homebrew 6 refuses to load anything from an untrusted
+        # tap during activation, and `brew trust` on the command line does not
+        # carry over -- the trust has to be in the generated Brewfile.
         brews = [
           "mas" # Mac App Store CLI, has no nixpkgs equivalent
         ];
@@ -61,7 +55,6 @@
 
           # Media
           "spotify"
-          "quickrecorder"
 
           # Design
           "figma"
