@@ -55,8 +55,6 @@
           "karabiner-elements"
           "keyboardcleantool"
           "raycast"
-          "scroll-reverser"
-          "hiddenbar"
 
           # Terminals. ghostty comes from nixpkgs (modules/ghostty); this one
           # stays a cask because it deliberately tracks nightly.
@@ -76,12 +74,11 @@
           "notion"
 
           # Media
-          "iina"
           "spotify"
           "quickrecorder"
-          "shottr"
 
-          # Photography
+          # Photography. rawtherapee's nixpkgs meta claims darwin support, but
+          # its dependency chain pulls in libselinux and fails to evaluate.
           "amazon-photos"
           "fujifilm-x-raw-studio"
           "rawtherapee"
@@ -98,9 +95,7 @@
           "logitech-options"
 
           # Utilities
-          "appcleaner"
           "smoothcsv"
-          "session-manager-plugin"
 
           # Networking
           "tailscale-app"
