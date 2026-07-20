@@ -1,7 +1,8 @@
 {
-  # OmniWM (https://github.com/BarutSRB/OmniWM): trial alongside rift, to
-  # decide which scrolling window manager this machine keeps. Only one may
-  # manage windows at a time -- stop rift's service before launching this.
+  # OmniWM (https://github.com/BarutSRB/OmniWM): the window manager, chosen
+  # over rift after a trial. Signed and notarized, niri-parity actions, and
+  # its built-in borders and menu-bar hiding replaced the separate borders
+  # and hidden-bar tools this machine used to run.
   #
   # settings.toml is the file the app generated on first launch with the niri
   # muscle memory remapped onto it (Alt+HJKL, Alt+R width presets, Alt+O
