@@ -1,6 +1,6 @@
 {
   flake.modules.homeManager.shell =
-    { pkgs, config, ... }:
+    { pkgs, ... }:
     {
       programs.tmux = {
         enable = true;
@@ -35,7 +35,6 @@
         ];
 
         extraConfig =
-          with config.theme;
           with pkgs.tmuxPlugins;
           ''
             #################################################
