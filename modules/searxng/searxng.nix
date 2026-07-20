@@ -28,15 +28,19 @@
           engines = [
             {
               name = "ahmia";
-              disabled = true;
+              inactive = true;
             }
             {
               name = "torch";
-              disabled = true;
+              inactive = true;
             }
             {
               name = "radio browser";
-              disabled = true;
+              inactive = true;
+            }
+            {
+              name = "wikidata";
+              inactive = true;
             }
           ];
           search.formats = [
