@@ -24,6 +24,7 @@ in
             hm.gnupg
             hm.lazysql
             hm.obsidian
+            hm.ghostty
 
             # Development
             hm."dev/common"

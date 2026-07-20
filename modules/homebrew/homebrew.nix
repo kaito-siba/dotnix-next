@@ -58,8 +58,8 @@
           "scroll-reverser"
           "hiddenbar"
 
-          # Terminals
-          "ghostty"
+          # Terminals. ghostty comes from nixpkgs (modules/ghostty); this one
+          # stays a cask because it deliberately tracks nightly.
           "wezterm@nightly"
 
           # Browsers
