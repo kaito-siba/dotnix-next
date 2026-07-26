@@ -31,6 +31,7 @@ in
             # Desktop applications
             hm.appcleaner
             hm.iina
+            hm.thunderbird
 
             # Development
             hm."dev/common"
