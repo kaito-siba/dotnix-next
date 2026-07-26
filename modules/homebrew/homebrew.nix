@@ -36,10 +36,6 @@
         ];
 
         casks = [
-          # Terminals. ghostty comes from nixpkgs (modules/ghostty); this one
-          # stays a cask because it deliberately tracks nightly.
-          "wezterm@nightly"
-
           # Browsers
           "google-chrome"
           "zen"
@@ -61,7 +57,6 @@
 
           # Hardware and peripherals
           "fujitsu-scansnap-home"
-          "logitech-options"
 
           # Utilities
           "smoothcsv"
