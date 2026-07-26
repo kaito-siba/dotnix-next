@@ -49,6 +49,17 @@
         '';
       };
 
+      # history manager
+      programs.atuin = {
+        enable = true;
+        enableZshIntegration = true;
+        settings = {
+          auto_sync = false;
+          filter_mode = "directory";
+          keymap_mode = "auto";
+        };
+      };
+
       home.sessionPath = [ "$HOME/.local/bin" ];
     };
 }

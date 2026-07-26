@@ -31,13 +31,18 @@
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    herdr = {
+      url = "github:ogulcancelik/herdr/v0.7.5";
+      inputs.nixpkgs.follows = "nixpkgs-unstable";
+    };
   };
-  
-  outputs = 
-    { import-tree, flake-parts, ... }@inputs: 
+
+  outputs =
+    { import-tree, flake-parts, ... }@inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [ (import-tree ./modules) ];
-      
+
       systems = [
         "x86_64-linux"
         "aarch64-darwin"

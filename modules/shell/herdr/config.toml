@@ -1,0 +1,29 @@
+[theme]
+name = "catppuccin"
+auto_switch = true
+light_name = "catppuccin-latte"
+dark_name = "catppuccin-mocha"
+
+[keys]
+prefix = "ctrl+space"
+
+detach = "prefix+d"
+rename_tab = "prefix+comma"
+close_tab = ["prefix+shift+x"]
+last_pane = "prefix+semicolon"
+cycle_pane_next = ["prefix+o", "prefix+tab"]
+open_notification_target = "prefix+shift+o"
+rename_workspace = ["prefix+$", "prefix+shift+w"]
+workspace_picker = ["prefix+w"]
+goto = "prefix+s"
+settings = "prefix+shift+s"
+swap_pane_up = ["prefix+shift+k"]
+swap_pane_down = ["prefix+shift+j"]
+
+split_vertical = ["prefix+|", "prefix+backslash"]
+split_horizontal = ["prefix+minus", "prefix+_"]
+previous_tab = ["prefix+p"]
+next_tab = ["prefix+n"]
+
+reload_config = "prefix+shift+r"
+resize_mode = "prefix+r"

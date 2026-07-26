@@ -9,5 +9,7 @@
         # Xcode project, packaged from the official release as ghostty-bin.
         package = lib.mkIf pkgs.stdenv.isDarwin pkgs.ghostty-bin;
       };
+
+      xdg.configFile."ghostty/config".source = ./config.ghostty;
     };
 }

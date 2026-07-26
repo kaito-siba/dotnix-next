@@ -2,7 +2,11 @@
   flake.modules.homeManager.shell = {
     programs.fzf = {
       enable = true;
-      enableZshIntegration = true;
+
+      # The bundled widgets go unused, and their Ctrl-T binding shadows the
+      # worktree picker from zsh-git-worktree-fzf. FZF_DEFAULT_OPTS below is a
+      # session variable, so the colors still reach every fzf call.
+      enableZshIntegration = false;
 
       # catppuccin latte, matching the starship palette.
       defaultOptions = [
