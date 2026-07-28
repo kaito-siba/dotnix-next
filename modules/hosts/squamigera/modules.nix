@@ -31,7 +31,7 @@ in
             # Desktop applications
             hm.appcleaner
             hm.video-player
-            hm.thunderbird
+            hm.mail
 
             # Development
             hm."dev/common"

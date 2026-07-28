@@ -60,7 +60,7 @@ in
             hm.zen-browser
             hm.chromium
             hm.slack
-            hm.geary
+            hm.mail
             hm.vesktop
             hm.vscode
             hm.obs
