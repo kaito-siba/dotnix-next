@@ -23,9 +23,6 @@
         font = {
           name = "Noto Sans CJK JP";
         };
-        gtk4.extraCss = ''
-          @import url("noctalia.css");
-        '';
       };
 
       # https://discourse.nixos.org/t/changing-gdm-gsettings-declaratively/49579/7

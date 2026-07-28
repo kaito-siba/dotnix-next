@@ -251,8 +251,8 @@ blur {
 // which may be more convenient to use.
 // See the binds section below for more spawn examples.
 
-// Start noctalia-shell on niri launch.
-spawn-at-startup "noctalia-shell"
+// noctalia v5 is a systemd user service; nothing to spawn here.
+// noctalia (v5) is started by its systemd user service instead.
 
 // To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
 // spawn-sh-at-startup "qs -c ~/source/qs/MyAwesomeShell"
@@ -408,10 +408,9 @@ binds {
     Super+O { spawn "obsidian"; }
     Super+S { spawn "slack"; }
     Super+D { spawn "vesktop"; }
-    Super+Space { spawn-sh "noctalia-shell ipc call launcher toggle"; }
-    Super+V { spawn-sh "noctalia-shell ipc call launcher clipboard"; }
-    Super+Alt+L { spawn-sh "noctalia-shell ipc call lockScreen lock"; }
-    Super+P { spawn-sh "noctalia-shell ipc call plugin:pomodoro toggle"; }
+    Super+Space { spawn-sh "noctalia msg panel-toggle launcher"; }
+    Super+V { spawn-sh "noctalia msg panel-toggle clipboard"; }
+    Super+Alt+L { spawn-sh "noctalia msg session lock"; }
 
     // Use spawn-sh to run a shell command. Do this if you need pipes, multiple commands, etc.
     // Note: the entire command goes as a single argument. It's passed verbatim to `sh -c`.
@@ -421,16 +420,16 @@ binds {
     // Example volume keys mappings for PipeWire & WirePlumber.
     // The allow-when-locked=true property makes them work even when the session is locked.
     // Using spawn-sh allows to pass multiple arguments together with the command.
-    XF86AudioRaiseVolume allow-when-locked=true { spawn-sh "noctalia-shell ipc call volume increase"; }
-    XF86AudioLowerVolume allow-when-locked=true { spawn-sh "noctalia-shell ipc call volume decrease"; }
-    XF86AudioMute        allow-when-locked=true { spawn-sh "noctalia-shell ipc call volume muteOutput"; }
-    XF86AudioMicMute     allow-when-locked=true { spawn-sh "noctalia-shell ipc call volume muteInput"; }
+    XF86AudioRaiseVolume allow-when-locked=true { spawn-sh "noctalia msg volume-up"; }
+    XF86AudioLowerVolume allow-when-locked=true { spawn-sh "noctalia msg volume-down"; }
+    XF86AudioMute        allow-when-locked=true { spawn-sh "noctalia msg volume-mute"; }
+    XF86AudioMicMute     allow-when-locked=true { spawn-sh "noctalia msg mic-mute"; }
 
     // Example brightness key mappings for brightnessctl.
     // You can use regular spawn with multiple arguments too (to avoid going through "sh"),
     // but you need to manually put each argument in separate "" quotes.
-    XF86MonBrightnessUp allow-when-locked=true { spawn-sh "noctalia-shell ipc call brightness increase"; }
-    XF86MonBrightnessDown allow-when-locked=true { spawn-sh "noctalia-shell ipc call brightness decrease"; }
+    XF86MonBrightnessUp allow-when-locked=true { spawn-sh "noctalia msg brightness-up"; }
+    XF86MonBrightnessDown allow-when-locked=true { spawn-sh "noctalia msg brightness-down"; }
 
     // Open/close the Overview: a zoomed-out view of workspaces and windows.
     // You can also move the mouse into the top-left hot corner,
@@ -641,7 +640,7 @@ binds {
     Print { screenshot; }
     Ctrl+Print { screenshot-window; }
     Alt+Print { screenshot-screen; }
-    Shift+Print { spawn-sh "noctalia-shell ipc call plugin:screen-recorder toggle"; }
+    Shift+Print { spawn-sh "noctalia msg plugin noctalia/screen_recorder:service all toggle"; }
 
     // Applications such as remote-desktop clients and software KVM switches may
     // request that niri stops processing the keyboard shortcuts defined here

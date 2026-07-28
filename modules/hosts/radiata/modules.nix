@@ -13,6 +13,7 @@ in
         virtualisation
         tailscale
         claude-code
+        noctalia
 
         # Desktop session
         desktop

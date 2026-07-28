@@ -1,0 +1,38 @@
+// niri appearance overrides, included from config.kdl as
+// "noctalia-transparent.kdl" (the name is kept from the v4 template era).
+// Static Catppuccin Mocha accents: mauve for focus, red for urgent.
+layout {
+
+    focus-ring {
+        active-color   "#cba6f7cc"
+        inactive-color "#585b70aa"
+        urgent-color   "#f38ba8aa"
+    }
+
+    border {
+        active-color   "#cba6f7cc"
+        inactive-color "#585b70aa"
+        urgent-color   "#f38ba8aa"
+    }
+
+    shadow {
+        color "#11111b70"
+    }
+
+    tab-indicator {
+        active-color   "#cba6f7cc"
+        inactive-color "#585b70aa"
+        urgent-color   "#f38ba8aa"
+    }
+
+    insert-hint {
+        color "#cba6f780"
+    }
+}
+
+recent-windows {
+    highlight {
+        active-color "#cba6f7cc"
+        urgent-color "#f38ba8aa"
+    }
+}

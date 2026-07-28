@@ -42,10 +42,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    noctalia = {
-      url = "github:noctalia-dev/noctalia/legacy-v4";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    # v5 (C++ native rewrite). Deliberately does NOT follow our nixpkgs:
+    # overriding inputs changes the derivation hash and loses the
+    # noctalia.cachix.org binary cache.
+    noctalia.url = "github:noctalia-dev/noctalia";
 
     xremap = {
       url = "github:xremap/nix-flake";

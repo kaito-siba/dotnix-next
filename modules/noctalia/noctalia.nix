@@ -1,146 +1,120 @@
 {
-  flake.modules.homeManager.noctalia =
-    { inputs, pkgs, ... }:
-    {
-      imports = [ inputs.noctalia.homeModules.default ];
+  # Noctalia v5 (C++ ネイティブ版) — メインのデスクトップシェル。
+  # v4 (quickshell 版) の設定に寄せた宣言的設定を config.toml として生成する。
+  # settings は build 時に本体のバリデータで検証される (validateConfig)。
+  flake.modules = {
+    nixos.noctalia = {
+      nix.settings = {
+        substituters = [ "https://noctalia.cachix.org" ];
+        trusted-public-keys = [
+          "noctalia.cachix.org-1:pCOR47nnMEo5thcxNDtzWpOxNFQsBRglJzxWPp3dkU4="
+        ];
+      };
+    };
 
-      home.packages = with pkgs; [
-        gpu-screen-recorder
-        wtype
-        gradia
+    homeManager.noctalia =
+      { inputs, pkgs, ... }:
+      {
+        imports = [ inputs.noctalia.homeModules.default ];
 
-        # theme generation for the user templates below
-        matugen
+        home.packages = with pkgs; [
+          gpu-screen-recorder # screen_recorder 公式プラグインの依存
+          translate-shell # translator 公式プラグインの依存
+          wtype # launcher の auto-paste 用
+          gradia # スクリーンショット注釈
+        ];
 
-        # for screen toolkit
-        grim
-        slurp
-        wl-clipboard
-        tesseract
-        imagemagick
-        zbar
-        curl
-        translate-shell
-        wl-screenrec
-        ffmpeg
-        gifski
+        programs.noctalia = {
+          enable = true;
 
-        # for file search
-        fd
-      ];
+          # niri セッション (graphical-session.target) に載せて常駐させる
+          systemd.enable = true;
 
-      programs.noctalia-shell = {
-        enable = true;
-        plugins = {
-          sources = [
-            {
-              enabled = true;
-              name = "Official Noctalia Plugins";
-              url = "https://github.com/noctalia-dev/noctalia-plugins";
-            }
-          ];
-          states = {
-            screen-recorder = {
-              enabled = true;
-              sourceUrl = "https://github.com/noctalia-dev/noctalia-plugins";
+          settings = {
+            shell = {
+              font_family = "IBM Plex Sans JP";
+              avatar_path = "~/.config/noctalia/avatar.jpg";
+              telemetry_enabled = false;
             };
-            pomodoro = {
-              enabled = true;
-              sourceUrl = "https://github.com/noctalia-dev/noctalia-plugins";
-            };
-            currency-exchange = {
-              enabled = true;
-              sourceUrl = "https://github.com/noctalia-dev/noctalia-plugins";
-            };
-            translator = {
-              enabled = true;
-              sourceUrl = "https://github.com/noctalia-dev/noctalia-plugins";
-            };
-            custom-commands = {
-              enabled = true;
-              sourceUrl = "https://github.com/noctalia-dev/noctalia-plugins";
-            };
-            model-usage = {
-              enabled = true;
-              sourceUrl = "https://github.com/noctalia-dev/noctalia-plugins";
-            };
-            screen-toolkit = {
-              enabled = true;
-              sourceUrl = "https://github.com/noctalia-dev/noctalia-plugins";
-            };
-            file-search = {
-              enabled = true;
-              sourceUrl = "https://github.com/noctalia-dev/noctalia-plugins";
-            };
-          };
-          version = 1;
-        };
 
-        pluginSettings = {
-          pomodoro = {
-            workDuration = 25;
-            shortBreakDuration = 5;
-            longBreakDuration = 15;
-            sessionsBeforeLongBreak = 4;
-            autoStartBreaks = true;
-            autoStartWork = true;
-            compactMode = true;
-          };
-          custom-commands = {
-            commands = [
+            # colorscheme は一旦 catppuccin。mode = auto は location から
+            # 昼夜で light/dark を切り替える (ghostty 等の auto 切替と整合)。
+            # アプリテーマ生成 (templates) は無効化し、各アプリは共有モジュール
+            # の静的 catppuccin を使い続ける。
+            theme = {
+              source = "builtin";
+              builtin = "Catppuccin";
+              mode = "auto";
+              templates = {
+                enable_builtin_templates = false;
+                enable_community_templates = false;
+              };
+            };
+
+            location = {
+              address = "Kobe";
+            };
+
+            wallpaper = {
+              enabled = true;
+              directory = "~/.config/noctalia/wallpapers";
+            };
+
+            # v4 のバー構成に寄せる: 左 control-center / 中央 workspace+media /
+            # 右 システム系 + 時計 + 通知。vibe-island は自作プラグインの島。
+            bar = [
               {
-                name = "Mirror Focused Screen";
-                command = "wl-mirror \"$(niri msg --json focused-output | jq -r .name)\"";
-                icon = "screen-share";
-              }
-              {
-                name = "Restart Slack";
-                command = "pkill -HUP slack && slack";
-                icon = "brand-slack";
+                position = "top";
+                background_opacity = 0.8;
+                margin_edge = 7;
+                margin_ends = 7;
+                start_widgets = [ "control-center" ];
+                center_widgets = [
+                  "workspaces"
+                  "media"
+                ];
+                end_widgets = [
+                  "kaito/vibe-island:island"
+                  "tray"
+                  "network"
+                  "bluetooth"
+                  "volume"
+                  "clock"
+                  "notifications"
+                ];
               }
             ];
-          };
-          model-usage = {
-            refreshIntervalSec = 30;
-            barCycleIntervalSec = 5;
-            providers = {
-              codex = {
-                enabled = true;
-              };
-              claude = {
-                enabled = true;
-              };
-            };
-            barMetric = "usage";
-          };
-        };
 
-        # App theming templates were dropped in favour of the static catppuccin
-        # themes the shared modules ship. Only the niri include remains, since
-        # config.kdl unconditionally includes noctalia-transparent.kdl.
-        user-templates = {
-          config = { };
-          templates = {
-            niri-transparent = {
-              input_path = "~/.config/noctalia/templates/niri-transparent.kdl";
-              output_path = "~/.config/niri/noctalia-transparent.kdl";
+            # ローカルの自作プラグイン (~/.local/share/noctalia/plugins/ に配置)
+            # と公式プラグインを宣言的に有効化する。
+            plugins = {
+              enabled = [
+                "kaito/custom-commands"
+                "kaito/vibe-island"
+                "noctalia/screen_recorder"
+                "noctalia/translator"
+              ];
             };
           };
         };
+
+        # ダークモード切替時に GNOME の color-scheme を追従させるフックスクリプト
+        home.file.".local/bin/set-gnome-color-schema" = {
+          source = ./scripts/set-gnome-color-schema;
+          executable = true;
+        };
+
+        # 自作ローカルプラグイン
+        xdg.dataFile."noctalia/plugins/custom-commands".source = ./plugins/custom-commands;
+        xdg.dataFile."noctalia/plugins/vibe-island".source = ./plugins/vibe-island;
+
+        # 壁紙とアバターは repo の assets から供給する
+        xdg.configFile."noctalia/wallpapers".source = ../../assets/wallpapers;
+        xdg.configFile."noctalia/avatar.jpg".source = ../../assets/icons/icon_1.jpg;
+
+        # niri の config.kdl が include する外観オーバーライド。v4 ではテンプレート
+        # 生成だったが、catppuccin 統一に伴い静的ファイル (mocha アクセント) にする。
+        xdg.configFile."niri/noctalia-transparent.kdl".source = ./niri-appearance.kdl;
       };
-
-      # for dynamic gnome color scheme switching with theme hook
-      home.file.".local/bin/set-gnome-color-schema" = {
-        source = ./scripts/set-gnome-color-schema;
-        executable = true;
-      };
-
-      xdg.configFile."noctalia/settings.json".source = ./settings.json;
-      xdg.configFile."noctalia/templates".source = ./templates;
-
-      # Wallpapers and the avatar are vendored in the repo; settings.json
-      # points at these store-backed links.
-      xdg.configFile."noctalia/wallpapers".source = ../../assets/wallpapers;
-      xdg.configFile."noctalia/avatar.jpg".source = ../../assets/icons/icon_1.jpg;
-    };
+  };
 }
