@@ -1,6 +1,6 @@
+{ config, ... }:
 {
-  # GTK/Qt appearance on the Linux desktop. noctalia.css referenced from the
-  # gtk4 import is generated at runtime by noctalia.
+  # GTK/Qt appearance on the Linux desktop.
   flake.modules.homeManager."desktop/linux" =
     { pkgs, ... }:
     {
@@ -21,7 +21,7 @@
           name = "Qogir";
         };
         font = {
-          name = "Noto Sans CJK JP";
+          name = config.flake.meta.fonts.ui;
         };
       };
 

@@ -1,3 +1,4 @@
+{ config, ... }:
 {
   flake.modules.homeManager.ghostty =
     { pkgs, lib, ... }:
@@ -13,7 +14,7 @@
         # as noctalia can override individual keys per host.
         settings = {
           theme = "dark: Catppuccin Mocha, light:Catppuccin Latte";
-          font-family = "Guguru Sans Code Console NF";
+          font-family = config.flake.meta.fonts.coding;
           window-decoration = "none";
           window-padding-x = 12;
           window-padding-y = 12;

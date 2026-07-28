@@ -1,3 +1,7 @@
+{ config, ... }:
+let
+  fonts = config.flake.meta.fonts;
+in
 {
   # Noctalia v5 (C++ ネイティブ版) — メインのデスクトップシェル。
   # v4 (quickshell 版) の設定に寄せた宣言的設定を config.toml として生成する。
@@ -32,7 +36,7 @@
 
           settings = {
             shell = {
-              font_family = "IBM Plex Sans JP";
+              font_family = fonts.ui;
               avatar_path = "~/.config/noctalia/avatar.jpg";
               telemetry_enabled = false;
             };
