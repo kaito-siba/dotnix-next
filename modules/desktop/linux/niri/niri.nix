@@ -1,5 +1,5 @@
 {
-  flake.modules.nixos.niri =
+  flake.modules.nixos.desktop =
     { inputs, pkgs, ... }:
     {
       programs.niri = {

@@ -10,7 +10,7 @@
     # by replacing karabiner.json, which clobbers the symlink -- the next
     # switch backs that up as .before-nix and restores the repo version, so
     # changes flow through this file, not the GUI.
-    homeManager.desktop =
+    homeManager."desktop/darwin" =
       { pkgs, lib, ... }:
       lib.mkIf pkgs.stdenv.isDarwin {
         xdg.configFile."karabiner/karabiner.json".source = ./config/karabiner.json;

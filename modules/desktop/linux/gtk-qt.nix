@@ -1,7 +1,7 @@
 {
   # GTK/Qt appearance on the Linux desktop. noctalia.css referenced from the
   # gtk4 import is generated at runtime by noctalia.
-  flake.modules.homeManager.theming =
+  flake.modules.homeManager."desktop/linux" =
     { pkgs, ... }:
     {
       home.packages = with pkgs; [

@@ -1,5 +1,5 @@
 {
-  flake.modules.homeManager.screenshot =
+  flake.modules.homeManager."desktop/linux" =
     { pkgs, config, ... }:
     {
       home.packages = with pkgs; [

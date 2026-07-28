@@ -1,7 +1,7 @@
 {
   # Console greeter that launches the niri session through uwsm. The
   # auto-logged-in user is host specific and set in each host module.
-  flake.modules.nixos.niri =
+  flake.modules.nixos.desktop =
     { pkgs, ... }:
     {
       environment.systemPackages = with pkgs; [

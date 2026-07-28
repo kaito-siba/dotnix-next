@@ -2,7 +2,7 @@
   # Declarative mozc user dictionary: entries below are converted to mozc's
   # binary user_dictionary.db at build time and installed on activation,
   # backing up any imperatively edited dictionary first.
-  flake.modules.homeManager.mozc =
+  flake.modules.homeManager."desktop/linux" =
     { lib, pkgs, ... }:
     let
       entries = [

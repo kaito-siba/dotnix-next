@@ -21,7 +21,7 @@ in
         {
           home-manager.users.w963n.imports = [
             hm.base
-            hm.desktop
+            hm."desktop/darwin"
             hm.shell
             hm.neovim
             hm.lazysql
@@ -30,7 +30,7 @@ in
 
             # Desktop applications
             hm.appcleaner
-            hm.iina
+            hm.video-player
             hm.thunderbird
 
             # Development

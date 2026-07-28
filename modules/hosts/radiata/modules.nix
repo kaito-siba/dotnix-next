@@ -15,12 +15,9 @@ in
         claude-code
 
         # Desktop session
-        niri
-        audio
+        desktop
         bluetooth
-        ime
         fonts
-        nautilus
         printing
         xremap
 
@@ -56,23 +53,20 @@ in
             hm.ghostty
 
             # Desktop session
-            hm.niri
+            hm."desktop/linux"
             hm.noctalia
-            hm.wayland
-            hm.screenshot
-            hm.theming
-            hm.mozc
-            hm.nautilus
 
             # Desktop applications
-            hm.desktop-apps
             hm.zen-browser
+            hm.chromium
+            hm.slack
+            hm.geary
             hm.vesktop
             hm.vscode
             hm.obs
             hm.onlyoffice
             hm.smoothcsv
-            hm.mpv
+            hm.video-player
 
             # Tracking
             hm.activitywatch

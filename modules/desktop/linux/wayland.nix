@@ -5,7 +5,7 @@
   # The hyprland configuration that used to live next to this was dropped:
   # the session runs niri, and hyprlock / hyprpaper / hyprpanel duties are
   # covered by noctalia.
-  flake.modules.homeManager.wayland =
+  flake.modules.homeManager."desktop/linux" =
     { pkgs, config, ... }:
     {
       home.packages = with pkgs; [

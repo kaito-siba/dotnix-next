@@ -21,7 +21,7 @@
     # store it resets the bar to defaults and then silently fails to re-run
     # the config, leaving an empty bar. Executing the config at daemon
     # startup works fine.
-    homeManager.desktop =
+    homeManager."desktop/darwin" =
       { pkgs, lib, ... }:
       lib.mkIf pkgs.stdenv.isDarwin {
         xdg.configFile."sketchybar" = {

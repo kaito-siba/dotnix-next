@@ -1,11 +1,11 @@
 {
   # File manager. gvfs supplies trash / mtp / network mounts, glib the gio CLI.
   flake.modules = {
-    nixos.nautilus = {
+    nixos.desktop = {
       services.gvfs.enable = true;
     };
 
-    homeManager.nautilus =
+    homeManager."desktop/linux" =
       { pkgs, ... }:
       {
         home.packages = with pkgs; [
