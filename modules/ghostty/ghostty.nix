@@ -13,7 +13,7 @@
         # as noctalia can override individual keys per host.
         settings = {
           theme = "dark: Catppuccin Mocha, light:Catppuccin Latte";
-          font-family = "Maple Mono NF CN";
+          font-family = "Guguru Sans Code Console NF";
           window-decoration = "none";
           window-padding-x = 12;
           window-padding-y = 12;

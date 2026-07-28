@@ -4,9 +4,9 @@
   # configured below.
   flake.modules =
     let
+      # コーディングフォント本体は Guguru Sans Code (guguru.nix, private input)
       sharedFonts =
         pkgs: with pkgs; [
-          maple-mono.NF-CN # terminal font (ghostty ほか)
           ibm-plex # IBM Plex Sans JP (noctalia UI)
           nerd-fonts.jetbrains-mono
           noto-fonts
@@ -18,14 +18,7 @@
       darwin.fonts =
         { pkgs, ... }:
         {
-          fonts.packages =
-            sharedFonts pkgs
-            ++ (with pkgs; [
-              nerd-fonts.fira-code
-              nerd-fonts.hack
-              nerd-fonts.meslo-lg
-              nerd-fonts.symbols-only
-            ]);
+          fonts.packages = sharedFonts pkgs;
         };
 
       nixos.fonts =
@@ -52,6 +45,7 @@
                 "Noto Sans CJK JP"
                 "Noto Sans"
                 "Noto Color Emoji"
+                "Guguru Sans Code 35"
               ];
               monospace = [
                 "Noto Sans Mono"
