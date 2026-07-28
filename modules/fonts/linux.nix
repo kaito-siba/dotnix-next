@@ -25,7 +25,7 @@
 
         fontconfig.defaultFonts = {
           serif = [
-            "Noto Sefif"
+            "Noto Serif"
             "Noto Color Emoji"
           ];
           sansSerif = [

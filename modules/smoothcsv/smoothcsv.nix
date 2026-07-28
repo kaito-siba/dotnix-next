@@ -30,10 +30,12 @@
       };
     in
     {
+      # The desktop entry's icon references ${contents} by store path, which
+      # keeps the extracted AppImage alive without installing it into the
+      # profile.
       home.packages = [
         smoothcsv
         smoothcsvWayland
-        contents
       ];
 
       xdg.enable = true;

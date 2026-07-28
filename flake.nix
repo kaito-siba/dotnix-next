@@ -62,7 +62,10 @@
       inputs.nixpkgs.follows = "nixpkgs-unstable";
     };
 
-    ragenix.url = "github:yaxitech/ragenix";
+    ragenix = {
+      url = "github:yaxitech/ragenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
     mysecrets = {
       url = "github:kaito-siba/nix-secrets";

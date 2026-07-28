@@ -47,6 +47,10 @@ export default definePlugin({
         keydownListener = (e: KeyboardEvent) => {
             if (e.key !== "Enter") return;
 
+            // IME composition-confirm Enter (変換確定) must pass through
+            // untouched, or the half-composed message gets sent.
+            if (e.isComposing || e.keyCode === 229) return;
+
             // Ensure we are inside a text box
             const target = e.target as HTMLElement;
             if (!target || !target.closest('[class*="slateContainer"], [class*="textArea"], [role="textbox"]')) return;

@@ -71,22 +71,6 @@ return {
 			t = colors.red,
 		}
 
-		local function mason_updates()
-			local registry = require("mason-registry")
-			registry.refresh()
-			local installed_packages = registry.get_installed_package_names()
-			local packages_outdated = 0
-			for _, pkg in pairs(installed_packages) do
-				local p = registry.get_package(pkg)
-				local version = p.get_installed_version(p)
-				local latest = p.get_latest_version(p)
-				if version ~= latest then
-					packages_outdated = packages_outdated + 1
-				end
-			end
-			return packages_outdated
-		end
-
 		local function show_macro_recording()
 			local recording_register = vim.fn.reg_recording()
 			if recording_register == "" then
@@ -154,7 +138,7 @@ return {
 				color_warn = { fg = colors.yellow, bg = "None", gui = "bold" },
 				color_info = { fg = colors.cyan, bg = "None", gui = "bold" },
 			},
-			color = { bg = mode, gui = "bold" },
+			color = { bg = "None", gui = "bold" },
 		}
 
 		local macro_recording = {
@@ -226,20 +210,8 @@ return {
 			end,
 		}
 
-		local mason = {
-			mason_updates() .. "",
-			color = { fg = colors.violet, bg = "None" },
-			cond = function()
-				return mason_updates() > 0
-			end,
-			icon = "",
-			on_click = function()
-				vim.cmd("Mason")
-			end,
-		}
-
 		local buffers = {
-			get_buffers(),
+			get_buffers,
 			color = { fg = colors.darkblue, bg = "None" },
 			on_click = function()
 				require("buffer_manager.ui").toggle_quick_menu()
@@ -279,7 +251,7 @@ return {
 				lualine_a = { mode },
 				lualine_b = { filename, alpha, branch },
 				lualine_c = { diagnostics, sep, macro_recording, harpoon },
-				lualine_x = { copilot, diff, fileformat, lazy, mason },
+				lualine_x = { copilot, diff, fileformat, lazy },
 				lualine_y = { buffers, filetype, progress },
 				lualine_z = { location },
 			},

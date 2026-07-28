@@ -1,14 +1,15 @@
 #!/bin/sh
+# Sync the GNOME color-scheme with noctalia's theme mode. Called from a
+# noctalia hook with "true"/"dark" for dark mode.
+#
+# dconf writes the key directly and needs no schema lookup, so this works
+# from noctalia's bare hook environment without guessing store paths.
 set -eu
 
-# set gsettings schema dir because noctalia hook shell is not sourcing the right env vars
-schema_dir="$(echo /nix/store/*-gsettings-desktop-schemas-*/share/gsettings-schemas/*/glib-2.0/schemas | tr ' ' '\n' | head -n1)"
-echo schema_dir="$schema_dir"
+mode="${1:-}"
+case "$mode" in
+  true | dark) scheme="prefer-dark" ;;
+  *) scheme="prefer-light" ;;
+esac
 
-if [ "$1" = "true" ]; then
-  env GSETTINGS_SCHEMA_DIR="$schema_dir" \
-    gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
-else
-  env GSETTINGS_SCHEMA_DIR="$schema_dir" \
-    gsettings set org.gnome.desktop.interface color-scheme 'prefer-light'
-fi
+dconf write /org/gnome/desktop/interface/color-scheme "'$scheme'"

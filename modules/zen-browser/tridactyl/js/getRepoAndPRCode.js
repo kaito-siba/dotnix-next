@@ -14,7 +14,8 @@ try {
   if (!result) {
     throw new Error("Not a PR page");
   }
-  window.navigator.clipboard.writeText(result);
+  // writeText is async; without .catch a rejection escapes the try/catch.
+  window.navigator.clipboard.writeText(result).catch(error => console.error(error));
 } catch (error) {
   console.error(error.message);
 }
