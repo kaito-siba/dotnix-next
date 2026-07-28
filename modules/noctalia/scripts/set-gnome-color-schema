@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+# set gsettings schema dir because noctalia hook shell is not sourcing the right env vars
+schema_dir="$(echo /nix/store/*-gsettings-desktop-schemas-*/share/gsettings-schemas/*/glib-2.0/schemas | tr ' ' '\n' | head -n1)"
+echo schema_dir="$schema_dir"
+
+if [ "$1" = "true" ]; then
+  env GSETTINGS_SCHEMA_DIR="$schema_dir" \
+    gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+else
+  env GSETTINGS_SCHEMA_DIR="$schema_dir" \
+    gsettings set org.gnome.desktop.interface color-scheme 'prefer-light'
+fi

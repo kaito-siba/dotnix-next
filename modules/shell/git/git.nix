@@ -23,9 +23,12 @@
           ];
         };
 
-        delta = {
+        difftastic = {
           enable = true;
-          enableGitIntegration = true;
+          git = {
+            enable = true;
+            diffToolMode = true;
+          };
         };
 
         zsh.shellAliases = {
@@ -52,7 +55,7 @@
               pagers = [
                 {
                   colorArg = "always";
-                  pager = "delta --paging=never";
+                  externalDiffCommand = "difft --color=always --display=inline --syntax-highlight=on --tab-width=2";
                 }
               ];
             };
