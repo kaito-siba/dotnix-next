@@ -24,7 +24,6 @@ in
             hm."desktop/darwin"
             hm.shell
             hm.neovim
-            hm.lazysql
             hm.obsidian
             hm.ghostty
 
@@ -34,11 +33,7 @@ in
             hm.mail
 
             # Development
-            hm."dev/common"
-            hm."dev/nix"
-            hm."dev/rust"
-            hm."dev/web"
-            hm."dev/python"
+            hm.dev
           ];
         }
       ];

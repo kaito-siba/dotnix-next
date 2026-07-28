@@ -1,5 +1,5 @@
 {
-  flake.modules.homeManager.sqlit =
+  flake.modules.homeManager.dev =
     { inputs, pkgs, ... }:
     let
       # `default` bundles all driver extras, including snowflake, whose

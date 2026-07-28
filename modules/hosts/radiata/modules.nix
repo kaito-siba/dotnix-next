@@ -39,13 +39,10 @@ in
             hm.shell
             hm.cli-tools
             hm.neovim
-            hm.lazysql
             hm.obsidian
             hm.claude-code
             hm.ai
-            hm.sqlit
             hm.llama
-            hm.aws
             hm.calendar
             hm.rbw
 
@@ -72,14 +69,7 @@ in
             hm.activitywatch
 
             # Development
-            hm."dev/common"
-            hm."dev/nix"
-            hm."dev/python"
-            hm."dev/web"
-            hm."dev/rustup"
-            hm."dev/javascript"
-            hm."dev/php"
-            hm."dev/db"
+            hm.dev
           ];
         }
       ];

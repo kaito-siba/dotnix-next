@@ -1,5 +1,5 @@
 {
-  flake.modules.homeManager."dev/javascript" =
+  flake.modules.homeManager.dev =
     { pkgs, ... }:
     {
       # nodejs itself comes from dev/web to avoid two node versions colliding
