@@ -1,11 +1,10 @@
 {
   flake.modules.nixos.desktop =
-    { inputs, pkgs, ... }:
+    { pkgs, ... }:
     {
-      programs.niri = {
-        enable = true;
-        package = inputs.niri.packages.${pkgs.stdenv.hostPlatform.system}.niri;
-      };
+      # niri 26.04 (nixpkgs 収録) で blur が入ったため、flake input からの
+      # ソースビルドをやめ binary cache の効く nixpkgs 版を使う。
+      programs.niri.enable = true;
 
       programs.uwsm = {
         enable = true;

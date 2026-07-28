@@ -37,11 +37,6 @@
       inputs.nixpkgs.follows = "nixpkgs-unstable";
     };
 
-    niri = {
-      url = "github:niri-wm/niri";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     # v5 (C++ native rewrite). Deliberately does NOT follow our nixpkgs:
     # overriding inputs changes the derivation hash and loses the
     # noctalia.cachix.org binary cache.
@@ -62,15 +57,6 @@
       inputs.nixpkgs.follows = "nixpkgs-unstable";
     };
 
-    ragenix = {
-      url = "github:yaxitech/ragenix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    mysecrets = {
-      url = "github:kaito-siba/nix-secrets";
-      flake = false;
-    };
   };
 
   outputs =

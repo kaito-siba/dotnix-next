@@ -67,8 +67,9 @@
 
       hardware.nvidia-container-toolkit.enable = true;
 
-      nixpkgs.config.cudaSupport = true;
-
+      # nixpkgs.config.cudaSupport をグローバルに立てると cuda 対応パッケージが
+      # 軒並み binary cache を外れるため、CUDA が必要なパッケージ側で個別に
+      # override する (例: llama モジュールの llama-cpp)。
       boot.extraModprobeConfig = ''
         options nvidia-drm modeset=1 fbdev=0
       '';

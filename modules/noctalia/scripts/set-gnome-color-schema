@@ -1,15 +1,25 @@
 #!/bin/sh
-# Sync the GNOME color-scheme with noctalia's theme mode. Called from a
-# noctalia hook with "true"/"dark" for dark mode.
+# Sync the GNOME color-scheme with noctalia's theme mode, so that every app
+# that follows the xdg-desktop-portal appearance setting (ghostty, firefox/zen,
+# electron apps, nvim's auto-dark-mode, ...) flips together.
 #
-# dconf writes the key directly and needs no schema lookup, so this works
-# from noctalia's bare hook environment without guessing store paths.
+# Called from noctalia hooks:
+#   theme_mode_changed  NOCTALIA_THEME_MODE=dark|light is set by the shell
+#   started             no env; ask the running shell for the resolved mode
+#
+# dconf writes the key directly and needs no schema lookup, so this works from
+# noctalia's bare hook environment without guessing store paths.
 set -eu
 
-mode="${1:-}"
+mode="${NOCTALIA_THEME_MODE:-${1:-}}"
+if [ -z "$mode" ]; then
+  mode="$(noctalia msg theme-mode-get 2>/dev/null || true)"
+fi
+
 case "$mode" in
-  true | dark) scheme="prefer-dark" ;;
-  *) scheme="prefer-light" ;;
+  dark | true) scheme="prefer-dark" ;;
+  light | false) scheme="prefer-light" ;;
+  *) exit 0 ;;
 esac
 
 dconf write /org/gnome/desktop/interface/color-scheme "'$scheme'"

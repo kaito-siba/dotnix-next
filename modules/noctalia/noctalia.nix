@@ -57,7 +57,7 @@
 
             wallpaper = {
               enabled = true;
-              directory = "~/.config/noctalia/wallpapers";
+              directory = "~/Pictures/wallpapers";
             };
 
             # v4 のバー構成に寄せる: 左 control-center / 中央 workspace+media /
@@ -85,6 +85,14 @@
               }
             ];
 
+            # v5 には v4 の syncGsettings に相当する仕組みが無いため、テーマの
+            # light/dark を hook で gsettings (portal 経由で各アプリが追従) に
+            # 反映する。started はログイン直後の初期同期用。
+            hooks = {
+              theme_mode_changed = [ "~/.local/bin/set-gnome-color-schema" ];
+              started = [ "~/.local/bin/set-gnome-color-schema" ];
+            };
+
             # ローカルの自作プラグイン (~/.local/share/noctalia/plugins/ に配置)
             # と公式プラグインを宣言的に有効化する。
             plugins = {
@@ -108,8 +116,8 @@
         xdg.dataFile."noctalia/plugins/custom-commands".source = ./plugins/custom-commands;
         xdg.dataFile."noctalia/plugins/vibe-island".source = ./plugins/vibe-island;
 
-        # 壁紙とアバターは repo の assets から供給する
-        xdg.configFile."noctalia/wallpapers".source = ../../assets/wallpapers;
+        # アバターは repo の assets から供給する (壁紙は ~/Pictures/wallpapers の
+        # 実ディレクトリを直接参照し、repo には同梱しない)
         xdg.configFile."noctalia/avatar.jpg".source = ../../assets/icons/icon_1.jpg;
 
         # niri の config.kdl が include する外観オーバーライド。v4 ではテンプレート
