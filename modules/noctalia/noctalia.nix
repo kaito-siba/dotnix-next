@@ -124,9 +124,6 @@ in
         # 実ディレクトリを直接参照し、repo には同梱しない)
         xdg.configFile."noctalia/avatar.jpg".source = ../../assets/icons/icon_1.jpg;
 
-        # niri の config.kdl が include する外観オーバーライド。v4 ではテンプレート
-        # 生成だったが、catppuccin 統一に伴い静的ファイル (mocha アクセント) にする。
-        xdg.configFile."niri/noctalia-transparent.kdl".source = ./niri-appearance.kdl;
       };
   };
 }
