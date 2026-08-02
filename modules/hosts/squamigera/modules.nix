@@ -14,6 +14,9 @@ in
         photography
         tailscale
 
+        # Development
+        dev
+
         # Users
         w963n
       ]
