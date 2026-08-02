@@ -6,17 +6,17 @@ monitorOrientationOverrides = []
 monitorRoutingOverrides = []
 
 [appearance]
-mode = "dark"
+mode = "automatic"
 
 [borders]
 enabled = true
-width = 3.0
+width = 2.0
 
 [borders.color]
 alpha = 1.0
-blue = 0.979300037944676
-green = 1.0
-red = 0.08458520228437894
+blue = 0.9592786431312561
+green = 0.4017864763736725
+red = 0.11663658171892166
 
 [clipboard]
 historyEnabled = false
@@ -41,13 +41,13 @@ moveCrossesMonitorAtEdge = false
 moveMouseToFocusedWindow = true
 
 [gaps]
-size = 10.0
+size = 6.0
 
 [gaps.outer]
-bottom = 5.0
-left = 5.0
-right = 5.0
-top = 5.0
+bottom = 0.0
+left = 0.0
+right = 0.0
+top = 0.0
 
 [general]
 animationsEnabled = true
@@ -84,7 +84,6 @@ margin = 1
 alwaysCenterSingleColumn = false
 centerFocusedColumn = "never"
 columnWidthPresets = [0.3333333333333333, 0.5, 0.6666666666666666]
-defaultColumnWidth = 0.5
 infiniteLoop = false
 maxVisibleColumns = 2
 singleWindowAspectRatio = "fill"
@@ -779,7 +778,7 @@ binding = "Unassigned"
 id = "preselectClear"
 
 [[hotkeys]]
-binding = "Control+Option+Space"
+binding = "Unassigned"
 id = "openCommandPalette"
 
 [[hotkeys]]
