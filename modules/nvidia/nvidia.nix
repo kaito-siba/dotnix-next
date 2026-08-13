@@ -34,7 +34,7 @@
   ];
 
   flake.modules.nixos.nvidia =
-    { pkgs, ... }:
+    { pkgs, lib, ... }:
     {
       # hardware.nvidia only loads the driver when xserver declares it, even
       # for a pure wayland session.
@@ -60,7 +60,9 @@
 
       hardware.nvidia = {
         modesetting.enable = true;
-        open = false;
+        # Blackwell (RTX 50 系) 以降はクローズド版カーネルモジュールが非対応で
+        # open が必須になるため、ホスト側で上書きできるよう mkDefault にする。
+        open = lib.mkDefault false;
         nvidiaSettings = true;
         powerManagement.enable = true;
       };

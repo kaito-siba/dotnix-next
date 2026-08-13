@@ -1,0 +1,13 @@
+output "DP-6" {
+    mode "3840x2160@59.997"
+    scale 1.5
+    transform "normal"
+    position x=0 y=0
+}
+
+output "HDMI-A-3" {
+    mode "1920x1080@74.973"
+    scale 1
+    transform "normal"
+    position x=2560 y=360
+}
