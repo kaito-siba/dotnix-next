@@ -1,0 +1,21 @@
+# v4 の custom-commands プラグイン相当: commands.json に定義したシェル
+# コマンドをランチャーから実行する。`/cmd` プレフィックスまたは
+# グローバル検索から起動できる。
+
+id = "kaito/custom-commands"
+name = "Custom Commands"
+version = "0.1.0"
+plugin_api = 9
+author = "kaito-siba"
+license = "MIT"
+dependencies = []
+tags = ["utility"]
+icon = "terminal-2"
+description = "Run user-defined shell commands from the launcher."
+
+[[launcher_provider]]
+id = "commands"
+entry = "commands.luau"
+prefix = "cmd"
+glyph = "terminal-2"
+include_in_global_search = true

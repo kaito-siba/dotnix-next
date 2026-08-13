@@ -4,7 +4,7 @@
   #
   # dev/* modules only put toolchains on PATH and deliberately know nothing
   # about any editor. Editor side configuration lives in modules/neovim.
-  flake.modules.homeManager."dev/common" =
+  flake.modules.homeManager.dev =
     { pkgs, ... }:
     {
       home.packages = with pkgs; [

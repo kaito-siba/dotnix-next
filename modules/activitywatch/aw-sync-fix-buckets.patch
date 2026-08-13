@@ -1,0 +1,37 @@
+Fix clap type downcast panic on --buckets / --host.
+
+The custom `parse_list` value_parser returns `Vec<String>`, but the field
+type is also `Option<Vec<String>>`, so clap stores `Vec<Vec<String>>`
+internally and panics when the derive-generated accessor tries to downcast.
+Use clap's built-in `value_delimiter = ','` instead, which splits the
+single CLI value into the expected `Vec<String>`.
+
+--- a/aw-sync/src/main.rs
++++ b/aw-sync/src/main.rs
+@@ -71,7 +71,7 @@
+
+         /// Specify buckets to sync using a comma-separated list.
+         /// By default, all buckets are synced.
+-        #[clap(long, value_parser=parse_list)]
++        #[clap(long, value_delimiter = ',')]
+         buckets: Option<Vec<String>>,
+
+         /// Full path to sync db file
+@@ -88,7 +88,7 @@
+     /// Then pushes local buckets from the aw-server to the local sync directory.
+     Sync {
+         /// Host(s) to pull from, comma separated. Will pull from all hosts if not specified.
+-        #[clap(long, value_parser=parse_list)]
++        #[clap(long, value_delimiter = ',')]
+         host: Option<Vec<String>>,
+
+         /// Date to start syncing from.
+@@ -99,7 +99,7 @@
+
+         /// Specify buckets to sync using a comma-separated list.
+         /// By default, all buckets are synced.
+-        #[clap(long, value_parser=parse_list)]
++        #[clap(long, value_delimiter = ',')]
+         buckets: Option<Vec<String>>,
+
+         /// Mode to sync in. Can be "push", "pull", or "both".

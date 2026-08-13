@@ -1,0 +1,400 @@
+diff --git a/src/fleet.js b/src/fleet.js
+index a0fbe2c..3e3a462 100644
+--- a/src/fleet.js
++++ b/src/fleet.js
+@@ -845,7 +845,9 @@ export const MUX_SESSION_RE = /^[A-Za-z0-9_.-]{1,64}$/;
+ // validation — callers must treat null as "omit the attach line".
+ export function attachHintRemote(dest, muxName, muxSession) {
+   if (!validHostToken(dest) || typeof muxSession !== 'string' || !MUX_SESSION_RE.test(muxSession)) return null;
+-  const inner = muxName === 'zellij' ? `zellij attach ${muxSession}` : `tmux new -A -s ${muxSession}`;
++  const inner = muxName === 'zellij' ? `zellij attach ${muxSession}`
++    : muxName === 'herdr' ? 'herdr'
++      : `tmux new -A -s ${muxSession}`;
+   return `ssh -t ${dest} '${inner}'`;
+ }
+ 
+diff --git a/src/hook.js b/src/hook.js
+index 4a16061..97ae6cd 100644
+--- a/src/hook.js
++++ b/src/hook.js
+@@ -50,10 +50,13 @@ export async function runHook(rest = []) {
+     try { payload = JSON.parse(raw); } catch { /* tolerate non-JSON */ }
+ 
+     const managedMux = process.env.UNSNOOZE_MUX;
+-    const muxName = managedMux || (process.env.ZELLIJ_PANE_ID ? 'zellij' : 'tmux');
+-    const pane = managedMux
+-      ? (process.env.UNSNOOZE_PANE || null)
+-      : (muxName === 'zellij' ? process.env.ZELLIJ_PANE_ID : process.env.TMUX_PANE || payload.tmux_pane) || null;
++    const muxName = managedMux
++      || (process.env.ZELLIJ_PANE_ID ? 'zellij'
++        : process.env.HERDR_PANE_ID ? 'herdr' : 'tmux');
++    const ambientPane = muxName === 'zellij' ? process.env.ZELLIJ_PANE_ID
++      : muxName === 'herdr' ? process.env.HERDR_PANE_ID
++        : process.env.TMUX_PANE || payload.tmux_pane;
++    const pane = (managedMux ? process.env.UNSNOOZE_PANE : ambientPane) || null;
+     const paneOwner = muxName === 'zellij'
+       ? (managedMux ? process.env.UNSNOOZE_PANE_OWNER : process.env.ZELLIJ_SESSION_NAME) || null
+       : null;
+diff --git a/src/multiplexer.js b/src/multiplexer.js
+index b2b2ba6..6b70c1a 100644
+--- a/src/multiplexer.js
++++ b/src/multiplexer.js
+@@ -1,11 +1,12 @@
+ import tmux from './multiplexers/tmux.js';
+ import zellij from './multiplexers/zellij.js';
++import herdr from './multiplexers/herdr.js';
+ import { getConfig } from './settings.js';
+ 
+-const NAMES = ['tmux', 'zellij'];
++const NAMES = ['tmux', 'zellij', 'herdr'];
+ 
+ export function createMultiplexerFactory({
+-  backends = { tmux, zellij },
++  backends = { tmux, zellij, herdr },
+   getSetting = () => getConfig('multiplexer'),
+   env = process.env,
+ } = {}) {
+@@ -30,8 +31,11 @@ export function createMultiplexerFactory({
+     try { configured = getSetting() || 'auto'; } catch { /* pre-setting compatibility */ }
+     if (configured !== 'auto') return configured;
+ 
++    // Innermost multiplexer wins: a tmux/zellij running inside a herdr pane
++    // sets its own env on top of the inherited HERDR_* vars.
+     if (env.ZELLIJ) return 'zellij';
+     if (env.TMUX) return 'tmux';
++    if (env.HERDR_ENV || env.HERDR_PANE_ID) return 'herdr';
+ 
+     const tmuxInstalled = isAvailable('tmux');
+     const zellijInstalled = isAvailable('zellij');
+diff --git a/src/multiplexers/herdr.js b/src/multiplexers/herdr.js
+new file mode 100644
+index 0000000..8dc75dd
+--- /dev/null
++++ b/src/multiplexers/herdr.js
+@@ -0,0 +1,272 @@
++import { execFile as execFileCb, spawnSync } from 'node:child_process';
++import { constants as osConstants } from 'node:os';
++import { promisify } from 'node:util';
++
++import { resolveSessionName, SessionCreateError } from './session-name.js';
++
++const execFileAsync = promisify(execFileCb);
++
++function defaultSpawner(file, args, { sync = false, ...options } = {}) {
++  if (sync) return spawnSync(file, args, options);
++  return execFileAsync(file, args, options).then(({ stdout }) => stdout);
++}
++
++// Most herdr subcommands answer with a JSON envelope: {"id":…,"result":{…}}
++// on success, {"error":{code,message}} (and exit 1) on failure. `pane read`
++// returns raw text and `pane run`/`send-*` print nothing — those bypass this.
++function parseResult(stdout) {
++  const parsed = JSON.parse(String(stdout));
++  if (parsed.error) throw new Error(`herdr: ${parsed.error.message || parsed.error.code}`);
++  if (!parsed.result) throw new Error('unsnooze: unexpected herdr response');
++  return parsed.result;
++}
++
++function envFlags(env = {}) {
++  return Object.entries(env)
++    .filter(([, value]) => value !== undefined)
++    .flatMap(([key, value]) => ['--env', `${key}=${value}`]);
++}
++
++// `pane run` space-joins its argv and types the line into the pane's shell,
++// so the command must be pre-quoted here. POSIX single-quoting ('\'' between
++// quoted runs) reads identically in bash/zsh and fish (adjacent strings
++// concatenate; \' outside quotes is a literal quote). A newline in an
++// argument would submit the line early — collapse to a space.
++function shellQuote(word) {
++  return `'${String(word).replace(/\n/g, ' ').replace(/'/g, `'\\''`)}'`;
++}
++
++// exec replaces the created shell, so the pane (and its emptied tab or
++// workspace) closes when the agent exits — herdr's native behavior, matching
++// tmux panes and zellij close_on_exit. Env travels via --env at pane
++// creation, never through this typed line.
++function execLine({ file, args = [] }) {
++  return ['exec', ...[file, ...args].map(shellQuote)].join(' ');
++}
++
++function exitStatus(result) {
++  if (result.status !== null && result.status !== undefined) return result.status;
++  return result.signal ? 128 + (osConstants.signals[result.signal] || 0) : 1;
++}
++
++function wrappedSessionName(env) {
++  return env.UNSNOOZE_SESSION_NAME || env.UNSNOOZE_TMUX_SESSION || 'unsnooze';
++}
++
++// Callers speak tmux key names ('Enter', 'Down'…); herdr wants its own
++// lowercase grammar and rejects unknown names with invalid_key.
++const KEY_NAMES = {
++  Enter: 'enter', Down: 'down', Up: 'up',
++  Escape: 'esc', Tab: 'tab', Backspace: 'backspace',
++};
++
++// Same Ink bracketed-paste hazard as tmux: text and the submitting Enter must
++// be two separate calls with a pause between them.
++export const SUBMIT_DELAY_MS = 150;
++
++export { SessionCreateError };
++
++export function createHerdr({ spawner = defaultSpawner, env = process.env } = {}) {
++  const run = (...args) => spawner('herdr', args);
++
++  const workspaces = async () => parseResult(await run('workspace', 'list')).workspaces || [];
++
++  // An unsnooze session maps onto a herdr workspace, addressed by label — the
++  // closest analogue of a tmux session name. herdr's own "sessions" are whole
++  // servers, and workspace ids are allocated per server run, so neither can
++  // serve as the durable name that revival records carry.
++  const workspaceByLabel = async label =>
++    (await workspaces()).find(ws => ws.label === label) || null;
++
++  const backend = {
++    name: 'herdr',
++    SUBMIT_DELAY_MS,
++
++    available() {
++      try {
++        return spawner('herdr', ['--version'], { sync: true, stdio: 'ignore', env }).status === 0;
++      } catch {
++        return false;
++      }
++    },
++
++    inside() { return !!(env.HERDR_ENV || env.HERDR_PANE_ID); },
++    currentPaneId() {
++      if (env.UNSNOOZE_MUX === 'herdr' && env.UNSNOOZE_PANE) return env.UNSNOOZE_PANE;
++      return env.HERDR_PANE_ID || null;
++    },
++
++    // The `recent` source includes scrollback but stays empty until output has
++    // actually scrolled; fall back to the visible screen so a fresh pane's
++    // banner or menu is never invisible to the poller.
++    async capturePane(pane, lines = 200) {
++      const out = await run('pane', 'read', String(pane),
++        '--source', 'recent', '--lines', String(lines));
++      if (String(out).trim()) return out;
++      return backend.capturePaneVisible(pane);
++    },
++
++    async capturePaneVisible(pane) {
++      return run('pane', 'read', String(pane), '--source', 'visible');
++    },
++
++    async sendText(pane, text) {
++      await run('pane', 'send-text', String(pane), text);
++      await new Promise(resolve => setTimeout(resolve, SUBMIT_DELAY_MS));
++      await run('pane', 'send-keys', String(pane), 'enter');
++    },
++
++    async sendKey(pane, key) {
++      await run('pane', 'send-keys', String(pane), KEY_NAMES[key] || String(key).toLowerCase());
++    },
++
++    async paneAlive(pane) {
++      try {
++        parseResult(await run('pane', 'get', String(pane)));
++        return true;
++      } catch {
++        return false;
++      }
++    },
++
++    // herdr pane ids are workspace-qualified ("w3:p1") and server-global, so
++    // the session is discovered from the pane itself, like tmux.
++    async sessionForPane(pane) {
++      try {
++        const info = parseResult(await run('pane', 'get', String(pane))).pane;
++        if (!info?.workspace_id) return null;
++        const ws = parseResult(await run('workspace', 'get', info.workspace_id)).workspace;
++        return ws?.label || null;
++      } catch {
++        return null;
++      }
++    },
++
++    async paneCurrentCommand(pane) {
++      try {
++        const info = parseResult(await run('pane', 'process-info', '--pane', String(pane))).process_info;
++        // `name` is already a basename ("zsh", "claude"), unlike argv/cmdline.
++        return info?.foreground_processes?.[0]?.name || null;
++      } catch {
++        return null;
++      }
++    },
++
++    async sessionExists(name) {
++      try {
++        return !!(await workspaceByLabel(name));
++      } catch {
++        return false;
++      }
++    },
++
++    async listSessions() {
++      try {
++        // Workspaces exist only while the server runs — never "exited".
++        return (await workspaces()).map(ws => ({ name: ws.label, exited: false }));
++      } catch {
++        return [];
++      }
++    },
++
++    async listSessionPanes(sessionName) {
++      try {
++        const ws = await workspaceByLabel(sessionName);
++        if (!ws) return [];
++        const panes = parseResult(await run('pane', 'list', '--workspace', ws.workspace_id)).panes || [];
++        return panes.map(entry => entry.pane_id);
++      } catch {
++        return [];
++      }
++    },
++
++    async closePane(pane) {
++      parseResult(await run('pane', 'close', String(pane)));
++    },
++
++    async deleteSession(name) {
++      const ws = await workspaceByLabel(name);
++      if (ws) parseResult(await run('workspace', 'close', ws.workspace_id));
++    },
++
++    async newWindow(sessionName, cwd, launchSpec) {
++      const existing = await workspaceByLabel(sessionName);
++      const flags = ['--cwd', cwd, '--no-focus', ...envFlags(launchSpec.env)];
++      const created = existing
++        ? parseResult(await run('tab', 'create', '--workspace', existing.workspace_id, ...flags))
++        : parseResult(await run('workspace', 'create', '--label', sessionName, ...flags));
++      const pane = created.root_pane?.pane_id;
++      if (!pane) throw new Error('unsnooze: herdr did not report a root pane');
++      // The server buffers typed input, so running immediately after create is
++      // safe even before the pane's shell has started.
++      await run('pane', 'run', pane, execLine(launchSpec));
++      return { pane, paneOwner: null };
++    },
++
++    launchWrapped(launchSpec) {
++      // Needs a running herdr server: the agent pane is created over the
++      // socket API first, then the foreground client attaches to show it.
++      // The workspace-list probe doubles as the server check and the label
++      // collision scan.
++      const probe = spawner('herdr', ['workspace', 'list'], { sync: true, env });
++      if (probe?.error || exitStatus(probe) !== 0) {
++        throw new SessionCreateError(
++          'herdr server is not running — start `herdr` once, or launch the agent inside a herdr pane',
++          probe?.error);
++      }
++      let taken;
++      try {
++        taken = new Set((parseResult(probe.stdout).workspaces || []).map(ws => ws.label));
++      } catch (err) {
++        throw new SessionCreateError(`unexpected herdr workspace list: ${err.message}`);
++      }
++      const name = resolveSessionName(wrappedSessionName(env), candidate => taken.has(candidate));
++      // Session name is discovered live via sessionForPane at record-write
++      // time — do NOT inject UNSNOOZE_SESSION_NAME (would leak into daemons
++      // spawned from the agent via {...process.env}).
++      const created = spawner('herdr', ['workspace', 'create', '--label', name,
++        '--cwd', process.cwd(), '--focus', ...envFlags(launchSpec.env)], { sync: true, env });
++      let pane = null;
++      let createError = created?.error?.message || null;
++      try {
++        pane = parseResult(created?.stdout ?? '').root_pane?.pane_id ?? null;
++      } catch (err) {
++        createError ??= err.message;
++      }
++      if (created?.error || exitStatus(created) !== 0 || !pane) {
++        throw new SessionCreateError(
++          `herdr could not create workspace "${name}"${createError ? `: ${createError}` : ''}`);
++      }
++      const typed = spawner('herdr', ['pane', 'run', pane, execLine(launchSpec)], { sync: true, env });
++      if (typed?.error || exitStatus(typed) !== 0) {
++        // The agent never started — close the empty workspace and fall back.
++        try { spawner('herdr', ['workspace', 'close', pane.split(':')[0]], { sync: true, stdio: 'ignore', env }); } catch { /* best-effort */ }
++        throw new SessionCreateError(`herdr could not start the agent in workspace "${name}"`);
++      }
++      // Attach the user's terminal. From here the agent is running server-side
++      // — a failed or ended attach must return a status, never throw, or the
++      // launcher's unwatched fallback would double-run the agent. Leaving the
++      // client (like tmux detach) keeps the agent alive on the server.
++      const result = spawner('herdr', [], { sync: true, stdio: 'inherit', env });
++      if (result?.error) {
++        process.stderr.write(`unsnooze: herdr attach failed (${result.error.message}) — agent keeps running; reattach with: herdr\n`);
++        return 0;
++      }
++      return exitStatus(result);
++    },
++
++    // herdr pane ids are server-global, so owner binding is intentionally inert.
++    bind() { return backend; },
++  };
++
++  return backend;
++}
++
++const herdr = createHerdr();
++
++export const available = (...args) => herdr.available(...args);
++export const inside = (...args) => herdr.inside(...args);
++export const currentPaneId = (...args) => herdr.currentPaneId(...args);
++export const launchWrapped = (...args) => herdr.launchWrapped(...args);
++
++export default herdr;
+diff --git a/src/reap.js b/src/reap.js
+index 4a60c96..4129770 100644
+--- a/src/reap.js
++++ b/src/reap.js
+@@ -14,6 +14,9 @@ const log = makeLogger('reap');
+ export function attachHint(muxName, sessionName) {
+   if (!sessionName) return null;
+   if (muxName === 'zellij') return `zellij attach ${sessionName}`;
++  // herdr sessions are workspaces inside the one persistent client; the CLI
++  // has no attach-to-workspace form, so the hint is just the client itself.
++  if (muxName === 'herdr') return 'herdr';
+   return `tmux attach -t ${sessionName}`;
+ }
+ 
+@@ -30,7 +33,7 @@ export function isUnsnoozeSessionName(name, base = MUX_SESSION_NAME) {
+ }
+ 
+ export async function listOwnedSessions({ muxName = null } = {}) {
+-  const names = muxName ? [muxName] : ['tmux', 'zellij'];
++  const names = muxName ? [muxName] : ['tmux', 'zellij', 'herdr'];
+   const out = [];
+   for (const name of names) {
+     let mux;
+@@ -150,7 +153,7 @@ export async function reap({
+   }
+ 
+   // Empty / EXITED unsnooze-owned sessions.
+-  for (const name of ['tmux', 'zellij']) {
++  for (const name of ['tmux', 'zellij', 'herdr']) {
+     let mux;
+     try { mux = getMultiplexer(name); } catch { continue; }
+     if (!mux.available?.() || typeof mux.listSessions !== 'function') continue;
+diff --git a/src/settings.js b/src/settings.js
+index d0513aa..90423c5 100644
+--- a/src/settings.js
++++ b/src/settings.js
+@@ -13,7 +13,7 @@ import { STATE_DIR } from './config.js';
+ export const CONFIG_FILE = () => join(process.env.UNSNOOZE_STATE_DIR || STATE_DIR, 'config.json');
+ 
+ export const DEFAULTS = {
+-  multiplexer: 'auto',    // auto | tmux | zellij
++  multiplexer: 'auto',    // auto | tmux | zellij | herdr
+   autoResume: true,        // master switch: dispatch resumes when limits reset
+   menuAutoAnswer: true,    // may unsnooze drive Claude's limit menu (send keys)?
+   notifications: true,     // desktop notifications on detect/resume
+@@ -92,7 +92,7 @@ const KNOWN_KEYS = Object.keys(ENV_NAMES);
+ 
+ // String settings restricted to a fixed set of values.
+ const ENUMS = {
+-  multiplexer: ['auto', 'tmux', 'zellij'],
++  multiplexer: ['auto', 'tmux', 'zellij', 'herdr'],
+   workspaceGuard: ['off', 'inform', 'pause'],
+   contextGuard: ['off', 'inform', 'pause'],
+   notifyChannel: ['auto', 'native', 'osc', 'bell'],

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Mirror Focused Screen",
+    "command": "wl-mirror \"$(niri msg --json focused-output | jq -r .name)\"",
+    "icon": "screen-share",
+    "description": "フォーカス中の出力を wl-mirror でミラー表示"
+  },
+  {
+    "name": "Restart Slack",
+    "command": "pkill -HUP slack && slack",
+    "icon": "brand-slack",
+    "description": "Slack を再起動"
+  }
+]
