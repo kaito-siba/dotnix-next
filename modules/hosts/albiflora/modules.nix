@@ -66,6 +66,7 @@ in
             hm.vesktop
             hm.vscode
             hm.obs
+            hm.gif
             hm.onlyoffice
             hm.smoothcsv
             hm.video-player
