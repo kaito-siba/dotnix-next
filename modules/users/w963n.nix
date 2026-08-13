@@ -9,6 +9,8 @@
       };
     };
 
+    # The account already exists on albiflora, so no initialPassword: mutable
+    # users keep the password that was set imperatively.
     modules.nixos.w963n =
       { pkgs, ... }:
       {
@@ -19,9 +21,13 @@
           extraGroups = [
             "networkmanager"
             "wheel"
+            "audio"
+            "video"
+            "docker"
+            "libvirtd"
+            "kvm"
           ];
           shell = pkgs.zsh;
-          initialPassword = "id";
         };
 
         programs.zsh.enable = true;

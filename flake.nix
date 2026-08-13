@@ -57,6 +57,13 @@
       inputs.nixpkgs.follows = "nixpkgs-unstable";
     };
 
+    # Thermalright の LCD/LED コントロールセンター。リリースタグ v9.9.5 より後に
+    # NixOS 向けの udev ルール修正が入っているため default ブランチを追う。
+    trcc-linux = {
+      url = "github:Lexonight1/thermalright-trcc-linux";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
   };
 
   outputs =

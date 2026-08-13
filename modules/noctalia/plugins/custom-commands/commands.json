@@ -10,5 +10,11 @@
     "command": "pkill -HUP slack && slack",
     "icon": "brand-slack",
     "description": "Slack を再起動"
+  },
+  {
+    "name": "Color Picker",
+    "command": "noctalia msg panel-toggle oldirtty/color_picker:panel",
+    "icon": "color-filter",
+    "description": "launch color picker"
   }
 ]
