@@ -24,6 +24,7 @@ in
         # Hardware
         nvidia
         coolercontrol
+        trcc
 
         # Compatibility for non-nix binaries (incl. mason-installed LSPs)
         compat
