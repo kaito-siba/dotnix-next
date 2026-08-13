@@ -25,11 +25,7 @@ in
             hm.neovim
 
             # Development
-            hm."dev/common"
-            hm."dev/nix"
-            hm."dev/rust"
-            hm."dev/web"
-            hm."dev/python"
+            hm.dev
           ];
         }
       ];

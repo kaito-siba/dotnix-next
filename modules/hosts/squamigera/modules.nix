@@ -14,6 +14,9 @@ in
         photography
         tailscale
 
+        # Development
+        dev
+
         # Users
         w963n
       ]
@@ -21,24 +24,19 @@ in
         {
           home-manager.users.w963n.imports = [
             hm.base
-            hm.desktop
+            hm."desktop/darwin"
             hm.shell
             hm.neovim
-            hm.lazysql
             hm.obsidian
             hm.ghostty
 
             # Desktop applications
             hm.appcleaner
-            hm.iina
-            hm.thunderbird
+            hm.video-player
+            hm.mail
 
             # Development
-            hm."dev/common"
-            hm."dev/nix"
-            hm."dev/rust"
-            hm."dev/web"
-            hm."dev/python"
+            hm.dev
           ];
         }
       ];

@@ -1,5 +1,5 @@
 {
-  flake.modules.homeManager."dev/web" =
+  flake.modules.homeManager.dev =
     { pkgs, ... }:
     {
       home.packages = with pkgs; [

@@ -1,0 +1,37 @@
+# Vibe Island (https://vibeisland.app) クローン: herdr で動いている AI
+# コーディングエージェント (Claude Code 等) の稼働状況をバーに集約表示し、
+# 完了・要確認をデスクトップ通知する。
+#
+# 構成:
+#   service (monitor.luau)  herdr の unix socket を同梱の python ヘルパー経由で
+#                           ポーリングし、状態を plugin state に発行 + 通知
+#   widget  (island.luau)   バー上の「島」。稼働中エージェント数を表示、
+#                           クリックでパネルを開く。エージェントが居ない時は非表示
+#   panel   (panel.luau)    エージェント一覧 (プロジェクト / セッションタイトル / 状態)
+
+id = "kaito/vibe-island"
+name = "Vibe Island"
+version = "0.1.0"
+plugin_api = 9
+author = "kaito-siba"
+license = "MIT"
+dependencies = []
+tags = ["ai", "monitor"]
+icon = "robot"
+description = "Dynamic-island style status for AI coding agents running under herdr."
+
+[[service]]
+id = "monitor"
+entry = "monitor.luau"
+
+[[widget]]
+id = "island"
+entry = "island.luau"
+
+[[panel]]
+id = "panel"
+entry = "panel.luau"
+width = 520
+height = 400
+placement = "floating"
+position = "center"

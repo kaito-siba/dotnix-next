@@ -43,6 +43,10 @@
         '';
 
         initContent = ''
+          # Stop the terminal driver from eating Ctrl-Q / Ctrl-S as XON/XOFF
+          # flow control so they stay bindable.
+          stty -ixon
+
           # Move by word with alt-left / alt-right.
           bindkey '^[[1;3D' backward-word
           bindkey '^[[1;3C' forward-word

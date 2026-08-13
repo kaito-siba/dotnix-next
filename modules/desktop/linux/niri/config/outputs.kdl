@@ -1,0 +1,2 @@
+// Host-specific output settings are provided by each Home Manager host module.
+// Keep this file present so the shared Niri config can include it safely.
