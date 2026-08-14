@@ -67,6 +67,7 @@ in
             hm.vscode
             hm.obs
             hm.gif
+            hm.trcc
             hm.onlyoffice
             hm.smoothcsv
             hm.video-player
