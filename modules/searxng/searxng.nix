@@ -27,6 +27,43 @@ in
             secret_key = "@SEARXING_SECRET_KEY@";
           };
           engines = [
+            # Brave Search API (キー認証)。スクレイパー系がIPブロックされたための根本対策
+            # 無料枠: 2,000クエリ/月・1qps
+            {
+              name = "brave api";
+              engine = "json_engine";
+              shortcut = "bapi";
+              categories = [
+                "general"
+                "web"
+              ];
+              search_url = "https://api.search.brave.com/res/v1/web/search?q={query}&count=20";
+              method = "GET";
+              headers = {
+                Accept = "application/json";
+                # searx-initはenvsubstで置換するため $VAR 形式 (environmentFile由来)
+                "X-Subscription-Token" = "$BRAVE_API_KEY";
+              };
+              results_query = "web/results";
+              url_query = "url";
+              title_query = "title";
+              content_query = "description";
+              timeout = 5.0;
+              disabled = false;
+            }
+            # 以下スクレイパー系はbot判定でブロック中(brave=rate limit, DDG/startpage=CAPTCHA)のため停止
+            {
+              name = "brave";
+              disabled = true;
+            }
+            {
+              name = "duckduckgo";
+              disabled = true;
+            }
+            {
+              name = "startpage";
+              disabled = true;
+            }
             {
               name = "ahmia";
               inactive = true;
