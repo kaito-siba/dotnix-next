@@ -4,7 +4,7 @@
     # This host was installed on 24.11; never bump stateVersion in place.
     system.stateVersion = lib.mkForce "24.11";
 
-    programs.nh.flake = "/home/rkv12/ghq/github.com/kaito-siba/dotnix-next";
+    programs.nh.flake = "/home/rkv12/repos/github.com/kaito-siba/dotnix-next";
 
     # Auto-login target for the tuigreet session configured in modules/niri.
     services.greetd.settings.initial_session.user = "rkv12";
