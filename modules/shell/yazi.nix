@@ -16,19 +16,19 @@
       };
     in
     {
-      # Previewers yazi shells out to. Without these it falls back to plain
-      # text for images, PDFs, video and archives.
-      home.packages = with pkgs; [
-        chafa
-        exiftool
-        ffmpeg
-        imagemagick
-        poppler-utils
-        _7zz
-      ];
-
       programs.yazi = {
         enable = true;
+
+        # nixpkgs' yazi is a wrapper that already puts every optional dep on
+        # yazi's PATH (jq, poppler-utils, 7zz, ffmpeg, fd, ripgrep, fzf,
+        # zoxide, imagemagick, chafa, resvg, file); extraPackages adds the
+        # ones it doesn't ship.
+        package = pkgs.yazi.override {
+          extraPackages = with pkgs; [
+            exiftool
+            mediainfo
+          ];
+        };
         enableZshIntegration = true;
         shellWrapperName = "y";
 
