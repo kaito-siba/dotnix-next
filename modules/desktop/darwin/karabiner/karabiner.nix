@@ -12,7 +12,7 @@
     # changes flow through this file, not the GUI.
     homeManager."desktop/darwin" =
       { pkgs, lib, ... }:
-      lib.mkIf pkgs.stdenv.isDarwin {
+      lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
         xdg.configFile."karabiner/karabiner.json".source = ./config/karabiner.json;
       };
   };

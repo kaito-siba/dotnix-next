@@ -9,7 +9,7 @@
   # policy the wrapper bakes into the bundle, the same bargain obsidian makes.
   flake.modules.homeManager.mail =
     { pkgs, lib, ... }:
-    lib.mkIf pkgs.stdenv.isDarwin {
+    lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
       home.packages = [
         (pkgs.thunderbird.override {
           extraPolicies.DisableAppUpdate = true;

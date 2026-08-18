@@ -26,7 +26,7 @@
 
     homeManager."desktop/darwin" =
       { pkgs, lib, ... }:
-      lib.mkIf pkgs.stdenv.isDarwin {
+      lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
         xdg.configFile."omniwm/settings.toml".source = ./config/settings.toml;
       };
   };

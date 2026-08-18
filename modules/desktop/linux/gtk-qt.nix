@@ -16,6 +16,9 @@
           name = "adw-gtk3";
           package = pkgs.adw-gtk3;
         };
+        # adw-gtk3 ships no gtk-4.0 theme, so pointing GTK4 at it (the pre-26.05
+        # legacy default) was a no-op; null lets GTK4/libadwaita use its default.
+        gtk4.theme = null;
         iconTheme = {
           package = pkgs.qogir-icon-theme;
           name = "Qogir";

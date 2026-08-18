@@ -8,7 +8,7 @@
 
         # nixpkgs only source-builds ghostty for Linux; the macOS app is an
         # Xcode project, packaged from the official release as ghostty-bin.
-        package = lib.mkIf pkgs.stdenv.isDarwin pkgs.ghostty-bin;
+        package = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin pkgs.ghostty-bin;
 
         # Settings are attrs (not a raw config file) so theming modules such
         # as noctalia can override individual keys per host.
@@ -24,8 +24,8 @@
         # accessibility window, so omniwm (which discovers windows through the
         # accessibility API) silently skips it. `hidden` drops the titlebar and
         # keeps the frame and rounded corners.
-        // lib.optionalAttrs pkgs.stdenv.isDarwin { macos-titlebar-style = "hidden"; }
-        // lib.optionalAttrs pkgs.stdenv.isLinux { window-decoration = "none"; };
+        // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin { macos-titlebar-style = "hidden"; }
+        // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux { window-decoration = "none"; };
       };
     };
 }

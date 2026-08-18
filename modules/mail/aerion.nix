@@ -85,7 +85,7 @@
     in
     {
       home.packages = [
-        (if pkgs.stdenv.isDarwin then darwinPkg else linuxPkg)
+        (if pkgs.stdenv.hostPlatform.isDarwin then darwinPkg else linuxPkg)
       ];
     };
 }

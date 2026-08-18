@@ -4,10 +4,10 @@
   flake.modules.homeManager.video-player =
     { pkgs, lib, ... }:
     lib.mkMerge [
-      (lib.mkIf pkgs.stdenv.isDarwin {
+      (lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
         home.packages = [ pkgs.iina ];
       })
-      (lib.mkIf pkgs.stdenv.isLinux {
+      (lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
         programs.mpv.enable = true;
       })
     ];
