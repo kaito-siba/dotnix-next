@@ -1,8 +1,6 @@
 -- Toolchain comes from modules/dev/web.nix
+-- The LazyVim extras (typescript / eslint) live in config/lazy.lua.
 return {
-  { import = "lazyvim.plugins.extras.lang.typescript" },
-  { import = "lazyvim.plugins.extras.linting.eslint" },
-
   -- css / html have no LazyVim extra
   {
     "neovim/nvim-lspconfig",

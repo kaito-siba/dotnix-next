@@ -18,11 +18,33 @@ require("lazy").setup({
   spec = {
     -- add LazyVim and import its plugins
     { "LazyVim/LazyVim", import = "lazyvim.plugins" },
-    -- import/override with your plugins, including the lang-*.lua files that
-    -- pull in LazyVim extras. Those are host independent: servers whose binary
-    -- is not on PATH are skipped, so the matching dev/* nix module is optional.
+    -- LazyVim extras must come after lazyvim.plugins and before our own
+    -- plugins, otherwise spec merging resolves in the wrong order. They are
+    -- host independent: servers whose binary is not on PATH are skipped, so
+    -- the matching dev/* nix module is optional.
+    -- cross cutting formats (modules/dev/common.nix)
+    { import = "lazyvim.plugins.extras.formatting.prettier" },
+    { import = "lazyvim.plugins.extras.lang.json" },
+    { import = "lazyvim.plugins.extras.lang.yaml" },
+    { import = "lazyvim.plugins.extras.lang.toml" },
+    { import = "lazyvim.plugins.extras.lang.markdown" },
+    -- nix (modules/dev/nix.nix)
+    { import = "lazyvim.plugins.extras.lang.nix" },
+    -- python (modules/dev/python.nix)
+    { import = "lazyvim.plugins.extras.lang.python" },
+    -- rust (modules/dev/rust.nix)
+    { import = "lazyvim.plugins.extras.lang.rust" },
+    -- web (modules/dev/web.nix)
+    { import = "lazyvim.plugins.extras.lang.typescript" },
+    { import = "lazyvim.plugins.extras.linting.eslint" },
+    -- import/override with your plugins
     { import = "plugins" },
   },
+  -- rockspec/packspec manifests shipped inside plugin repos can pull in
+  -- undeclared plugins as non-optional dependencies (e.g. nvim-dap via
+  -- nvim-dap-python's rockspec, which then loads without the dap.core extra
+  -- and crashes). Only trust lazy.lua manifests.
+  pkg = { sources = { "lazy" } },
   defaults = {
     -- By default, only LazyVim plugins will be lazy-loaded. Your custom plugins will load during startup.
     -- If you know what you're doing, you can set this to `true` to have all your custom plugins lazy-loaded by default.
