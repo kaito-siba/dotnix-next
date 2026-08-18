@@ -1,3 +1,9 @@
+# Kitty graphics re-hosting is off by default; without it panes swallow
+# image escape sequences, so yazi/nvim media previews render nothing.
+# https://github.com/herdrdev/herdr/issues/136
+[experimental]
+kitty_graphics = true
+
 [theme]
 name = "catppuccin"
 auto_switch = true
