@@ -11,9 +11,9 @@
       xdg.userDirs = {
         enable = true;
         createDirectories = true;
-        # Explicitly keep the pre-26.05 default: exports XDG_*_DIR into the
-        # session so runtime consumers keep seeing them.
-        setSessionVariables = true;
+        # The 26.05 default. XDG_*_DIR env vars are not the spec's interface
+        # (user-dirs.dirs / xdg-user-dir are), and nothing here reads them.
+        setSessionVariables = false;
       };
 
       xdg.configFile."swappy/config".text = ''
