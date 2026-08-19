@@ -14,17 +14,19 @@
       homebrew = {
         enable = true;
 
-        # Updating is left to the casks themselves -- nearly all of them carry
-        # Sparkle, which is the reason they are casks and not nix packages --
-        # so activation stays fast and does not reach out to the network.
+        # Activation also updates: not everything here self-updates (formulae
+        # like sketchybar never do, and casks such as activitywatch carry no
+        # updater), so a switch upgrades the whole brew state along with it.
+        # The cost is that activation reaches out to the network and takes
+        # longer; when offline, expect the brew step to fail.
         #
         # Declared state is the whole state: anything installed by hand and not
         # listed here is uninstalled on activation. "uninstall" rather than
         # "zap" so removal never takes an application's data with it.
         onActivation = {
-          autoUpdate = false;
+          autoUpdate = true;
           cleanup = "uninstall";
-          upgrade = false;
+          upgrade = true;
         };
 
         # Third-party taps are declared by the modules that consume them, with
