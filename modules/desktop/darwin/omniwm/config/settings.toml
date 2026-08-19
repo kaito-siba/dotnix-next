@@ -505,19 +505,19 @@ binding = "Unassigned"
 id = "moveWorkspaceToMonitor.down"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+Shift+H"
 id = "moveWindowToMonitor.left"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+Shift+L"
 id = "moveWindowToMonitor.right"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+Shift+K"
 id = "moveWindowToMonitor.up"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+Shift+J"
 id = "moveWindowToMonitor.down"
 
 [[hotkeys]]
@@ -906,7 +906,7 @@ layoutType = "niri"
 name = "8"
 
 [workspaces.monitorAssignment]
-type = "main"
+type = "secondary"
 
 [[workspaces]]
 id = "8D6FA06A-DD14-41C4-9FF2-48FF5CFBA0AE"
@@ -914,4 +914,4 @@ layoutType = "niri"
 name = "9"
 
 [workspaces.monitorAssignment]
-type = "main"
+type = "secondary"
