@@ -37,7 +37,8 @@
 
       # auto-optimise-store / min-free / max-free are omitted on darwin: the
       # store GC knobs there behave differently, so rely on optimise.automatic.
-      # programs.nh has no nix-darwin equivalent, so it stays NixOS-only.
+      # nix-darwin has no programs.nh module; nh-darwin.nix assembles the
+      # equivalent by hand.
       darwin.base = {
         nix = {
           extraOptions = ''
