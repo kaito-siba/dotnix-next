@@ -1,9 +1,10 @@
 { config, ... }:
 {
-  # No networking.* for this host: its
-  # hostname is managed outside this repo, so nix deliberately leaves it alone.
-  # The flake attribute matches that hostname so darwin-rebuild resolves the
-  # configuration without an explicit --flake argument.
+  # No networking.* for this host: its hostname is managed outside this repo,
+  # so nix deliberately leaves it alone. Because of that the flake attribute
+  # cannot match the real hostname, and darwin-rebuild needs it spelled out:
+  #
+  #   sudo darwin-rebuild switch --flake .#incarnata
   flake.modules.darwin."hosts/incarnata" = {
     nixpkgs.hostPlatform = "aarch64-darwin";
 
