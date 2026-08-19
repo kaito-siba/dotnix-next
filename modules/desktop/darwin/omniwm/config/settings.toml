@@ -393,47 +393,47 @@ binding = "Control+Option+Shift+Down Arrow"
 id = "moveWindowToWorkspaceDown"
 
 [[hotkeys]]
-binding = "Control+Option+Shift+Page Up"
+binding = "Control+Option+I"
 id = "moveColumnToWorkspaceUp"
 
 [[hotkeys]]
-binding = "Control+Option+Shift+Page Down"
+binding = "Control+Option+U"
 id = "moveColumnToWorkspaceDown"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+1"
 id = "moveColumnToWorkspace.0"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+2"
 id = "moveColumnToWorkspace.1"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+3"
 id = "moveColumnToWorkspace.2"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+4"
 id = "moveColumnToWorkspace.3"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+5"
 id = "moveColumnToWorkspace.4"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+6"
 id = "moveColumnToWorkspace.5"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+7"
 id = "moveColumnToWorkspace.6"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+8"
 id = "moveColumnToWorkspace.7"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+9"
 id = "moveColumnToWorkspace.8"
 
 [[hotkeys]]
@@ -477,11 +477,11 @@ binding = "Option+Period"
 id = "expelWindowFromColumn"
 
 [[hotkeys]]
-binding = "Control+Command+Tab"
+binding = "Control+Option+J"
 id = "focusMonitorNext"
 
 [[hotkeys]]
-binding = "Unassigned"
+binding = "Control+Option+K"
 id = "focusMonitorPrevious"
 
 [[hotkeys]]
@@ -565,39 +565,39 @@ binding = "Option+End"
 id = "focusColumnLast"
 
 [[hotkeys]]
-binding = "Control+Option+1"
+binding = "Unassigned"
 id = "focusColumn.0"
 
 [[hotkeys]]
-binding = "Control+Option+2"
+binding = "Unassigned"
 id = "focusColumn.1"
 
 [[hotkeys]]
-binding = "Control+Option+3"
+binding = "Unassigned"
 id = "focusColumn.2"
 
 [[hotkeys]]
-binding = "Control+Option+4"
+binding = "Unassigned"
 id = "focusColumn.3"
 
 [[hotkeys]]
-binding = "Control+Option+5"
+binding = "Unassigned"
 id = "focusColumn.4"
 
 [[hotkeys]]
-binding = "Control+Option+6"
+binding = "Unassigned"
 id = "focusColumn.5"
 
 [[hotkeys]]
-binding = "Control+Option+7"
+binding = "Unassigned"
 id = "focusColumn.6"
 
 [[hotkeys]]
-binding = "Control+Option+8"
+binding = "Unassigned"
 id = "focusColumn.7"
 
 [[hotkeys]]
-binding = "Control+Option+9"
+binding = "Unassigned"
 id = "focusColumn.8"
 
 [[hotkeys]]
