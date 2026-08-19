@@ -27,7 +27,7 @@ maxTotalBytes = 67108864
 [dwindle]
 defaultSplitRatio = 1.0
 moveToRootStable = true
-singleWindowAspectRatio = "fill"
+singleWindowFit = "fill"
 smartSplit = false
 splitWidthMultiplier = 1.0
 useGlobalGaps = true
@@ -53,6 +53,7 @@ top = 0.0
 animationsEnabled = true
 defaultLayoutType = "niri"
 hotkeysEnabled = true
+hyperKeyModifiers = "Control+Option+Shift+Command"
 ipcEnabled = true
 preventSleepEnabled = false
 systemHyperTrigger = "None"
@@ -61,6 +62,7 @@ updateChecksEnabled = true
 [gestures]
 fingerCount = 3
 invertDirection = true
+mouseMoveModifierKey = "option"
 mouseResizeModifierKey = "option"
 scrollEnabled = true
 scrollModifierKey = "optionShift"
@@ -83,10 +85,11 @@ margin = 1
 [niri]
 alwaysCenterSingleColumn = false
 centerFocusedColumn = "never"
-columnWidthPresets = [0.3333333333333333, 0.5, 0.6666666666666666]
+containerPrimarySpanPresets = [0.3333333333333333, 0.5, 0.6666666666666666]
+defaultContainerPrimarySpan = 0.5
 infiniteLoop = false
-maxVisibleColumns = 2
-singleWindowAspectRatio = "fill"
+singleWindowFit = "fill"
+visibleContainerCount = 2
 
 [overview]
 zoom = 1.0
@@ -120,6 +123,8 @@ red = 0.3
 [quakeTerminal]
 animationDuration = 0.2
 autoHide = false
+backgroundBlurRadius = 0
+backgroundEffect = "standardBlur"
 enabled = true
 heightPercent = 50.0
 monitorMode = "focusedWindow"
@@ -154,6 +159,8 @@ systemStatsButton = false
 windowLevel = "popup"
 xOffset = 0.0
 yOffset = 0.0
+
+[workspaceBar.iconOverrides]
 
 [[appRules]]
 bundleId = "com.openai.codex"
@@ -462,14 +469,6 @@ binding = "Unassigned"
 id = "moveWindowUpOrToWorkspaceUp"
 
 [[hotkeys]]
-binding = "Unassigned"
-id = "consumeOrExpelWindowLeft"
-
-[[hotkeys]]
-binding = "Unassigned"
-id = "consumeOrExpelWindowRight"
-
-[[hotkeys]]
 binding = "Option+Comma"
 id = "consumeWindowIntoColumn"
 
@@ -488,6 +487,38 @@ id = "focusMonitorPrevious"
 [[hotkeys]]
 binding = "Control+Command+Grave"
 id = "focusMonitorLast"
+
+[[hotkeys]]
+binding = "Unassigned"
+id = "moveWorkspaceToMonitor.left"
+
+[[hotkeys]]
+binding = "Unassigned"
+id = "moveWorkspaceToMonitor.right"
+
+[[hotkeys]]
+binding = "Unassigned"
+id = "moveWorkspaceToMonitor.up"
+
+[[hotkeys]]
+binding = "Unassigned"
+id = "moveWorkspaceToMonitor.down"
+
+[[hotkeys]]
+binding = "Unassigned"
+id = "moveWindowToMonitor.left"
+
+[[hotkeys]]
+binding = "Unassigned"
+id = "moveWindowToMonitor.right"
+
+[[hotkeys]]
+binding = "Unassigned"
+id = "moveWindowToMonitor.up"
+
+[[hotkeys]]
+binding = "Unassigned"
+id = "moveWindowToMonitor.down"
 
 [[hotkeys]]
 binding = "Option+Shift+F"
@@ -643,63 +674,63 @@ id = "moveColumnToIndex.9"
 
 [[hotkeys]]
 binding = "Option+R"
-id = "cycleColumnWidthForward"
+id = "cycleSizeForward"
 
 [[hotkeys]]
 binding = "Unassigned"
-id = "cycleColumnWidthBackward"
+id = "cycleSizeBackward"
 
 [[hotkeys]]
 binding = "Unassigned"
-id = "cycleWindowWidthForward"
+id = "cycleWindowPrimarySpanForward"
 
 [[hotkeys]]
 binding = "Unassigned"
-id = "cycleWindowWidthBackward"
+id = "cycleWindowPrimarySpanBackward"
 
 [[hotkeys]]
 binding = "Option+Shift+R"
-id = "cycleWindowHeightForward"
+id = "cycleWindowSecondarySpanForward"
 
 [[hotkeys]]
 binding = "Unassigned"
-id = "cycleWindowHeightBackward"
+id = "cycleWindowSecondarySpanBackward"
 
 [[hotkeys]]
 binding = "Option+F"
-id = "toggleColumnFullWidth"
+id = "toggleContainerFullPrimarySpan"
 
 [[hotkeys]]
 binding = "Control+Option+F"
-id = "expandColumnToAvailableWidth"
+id = "expandContainerToAvailablePrimarySpan"
 
 [[hotkeys]]
 binding = "Control+Option+R"
-id = "resetWindowHeight"
+id = "resetWindowSecondarySpan"
 
 [[hotkeys]]
 binding = "Option+Minus"
-id = "setColumnWidth.decrease10Percent"
+id = "setContainerPrimarySpan.decrease10Percent"
 
 [[hotkeys]]
 binding = "Option+Shift+Equal"
-id = "setColumnWidth.increase10Percent"
+id = "setContainerPrimarySpan.increase10Percent"
 
 [[hotkeys]]
 binding = "Unassigned"
-id = "setWindowWidth.decrease10Percent"
+id = "setWindowPrimarySpan.decrease10Percent"
 
 [[hotkeys]]
 binding = "Unassigned"
-id = "setWindowWidth.increase10Percent"
+id = "setWindowPrimarySpan.increase10Percent"
 
 [[hotkeys]]
 binding = "Control+Option+Minus"
-id = "setWindowHeight.decrease10Percent"
+id = "setWindowSecondarySpan.decrease10Percent"
 
 [[hotkeys]]
 binding = "Control+Option+Shift+Equal"
-id = "setWindowHeight.increase10Percent"
+id = "setWindowSecondarySpan.increase10Percent"
 
 [[hotkeys]]
 binding = "Option+Shift+B"
@@ -719,35 +750,19 @@ id = "swapSplit"
 
 [[hotkeys]]
 binding = "Unassigned"
-id = "resizeGrow.left"
+id = "resizeGrow.horizontal"
 
 [[hotkeys]]
 binding = "Unassigned"
-id = "resizeGrow.right"
+id = "resizeGrow.vertical"
 
 [[hotkeys]]
 binding = "Unassigned"
-id = "resizeGrow.up"
+id = "resizeShrink.horizontal"
 
 [[hotkeys]]
 binding = "Unassigned"
-id = "resizeGrow.down"
-
-[[hotkeys]]
-binding = "Unassigned"
-id = "resizeShrink.left"
-
-[[hotkeys]]
-binding = "Unassigned"
-id = "resizeShrink.right"
-
-[[hotkeys]]
-binding = "Unassigned"
-id = "resizeShrink.up"
-
-[[hotkeys]]
-binding = "Unassigned"
-id = "resizeShrink.down"
+id = "resizeShrink.vertical"
 
 [[hotkeys]]
 binding = "Unassigned"
