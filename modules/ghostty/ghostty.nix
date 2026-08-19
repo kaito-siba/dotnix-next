@@ -17,6 +17,11 @@
           font-family = config.flake.meta.fonts.coding;
           window-padding-x = 12;
           window-padding-y = 12;
+
+          # Subtle transparency. Blur keeps text readable over whatever is
+          # behind the window; without it the same opacity looks far messier.
+          background-opacity = 0.92;
+          background-blur-radius = 20;
         }
         # Same intent on both platforms -- no titlebar -- but the macOS knob
         # has to be the other one. `window-decoration = none` strips the whole
