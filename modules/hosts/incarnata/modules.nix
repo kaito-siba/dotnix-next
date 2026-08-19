@@ -39,6 +39,7 @@ in
             hm.video-player
             hm.mail
             hm.smoothcsv
+            hm.vesktop
 
             # Development
             hm.dev

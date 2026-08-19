@@ -43,7 +43,6 @@
           "zen"
 
           # Communication
-          "discord"
           "slack"
           "zoom"
 
