@@ -58,9 +58,6 @@
           # Hardware and peripherals
           "fujitsu-scansnap-home"
 
-          # Utilities
-          "smoothcsv"
-
           # AI
           "claude"
         ];

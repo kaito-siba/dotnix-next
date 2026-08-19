@@ -34,6 +34,7 @@ in
             hm.appcleaner
             hm.video-player
             hm.mail
+            hm.smoothcsv
 
             # Development
             hm.dev
