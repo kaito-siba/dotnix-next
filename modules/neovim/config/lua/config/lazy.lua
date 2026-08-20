@@ -30,6 +30,8 @@ require("lazy").setup({
     { import = "lazyvim.plugins.extras.lang.markdown" },
     -- nix (modules/dev/nix.nix)
     { import = "lazyvim.plugins.extras.lang.nix" },
+    -- php (modules/dev/php.nix)
+    { import = "lazyvim.plugins.extras.lang.php" },
     -- python (modules/dev/python.nix)
     { import = "lazyvim.plugins.extras.lang.python" },
     -- rust (modules/dev/rust.nix)
