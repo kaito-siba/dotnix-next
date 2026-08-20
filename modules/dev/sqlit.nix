@@ -30,6 +30,7 @@
         pyPkgs.pymysql
         pyPkgs.psycopg2-binary
         pyPkgs.sshtunnel
+        pyPkgs.pyathena
       ];
 
       sqlitWithDrivers = pkgs.symlinkJoin {
