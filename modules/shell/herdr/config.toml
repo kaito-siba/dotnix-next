@@ -36,3 +36,12 @@ next_tab = ["prefix+n"]
 
 reload_config = "prefix+shift+r"
 resize_mode = "prefix+r"
+
+# herdr-reviewr (persiyanov.reviewr) のレビューペインをトグルする。
+# split_vertical を prefix+| / prefix+backslash に振り直しているので既定の
+# prefix+v は空いているが、shift 付きのほうが既定バインドと一切衝突しない。
+[[keys.command]]
+key = "prefix+shift+v"
+type = "plugin_action"
+command = "persiyanov.reviewr.toggle"
+description = "toggle reviewr pane"
