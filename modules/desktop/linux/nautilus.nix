@@ -16,7 +16,7 @@
         # Reveal the selected file in nautilus from within yazi.
         programs.yazi.settings.opener.reveal = [
           {
-            run = ''setsid -f nautilus "$@" >/dev/null 2>&1'';
+            run = ''setsid -f nautilus %s1 >/dev/null 2>&1'';
             orphan = true;
             desc = "Reveal in Nautilus";
           }

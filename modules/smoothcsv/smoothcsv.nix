@@ -104,7 +104,7 @@
               icon = "${contents}/${pname}-app.png";
             };
           }
-          (yaziIntegration ''setsid -f smoothcsv-wayland "$@" >/dev/null 2>&1'')
+          (yaziIntegration ''setsid -f smoothcsv-wayland %s >/dev/null 2>&1'')
         ]
       ))
 
@@ -115,7 +115,7 @@
           }
           # `open -a` by store path rather than by name: it works even before
           # LaunchServices has indexed the linked application folder.
-          (yaziIntegration ''open -a "${smoothcsvApp}/Applications/SmoothCSV.app" "$@"'')
+          (yaziIntegration ''open -a "${smoothcsvApp}/Applications/SmoothCSV.app" %s'')
         ]
       ))
     ];
