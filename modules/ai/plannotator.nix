@@ -36,43 +36,48 @@
     let
       inherit (pkgs.stdenv.hostPlatform) isLinux system;
 
-      plannotatorVersion = "0.27.12";
+      plannotatorVersion = "0.27.14";
       plannotatorAssets = {
         x86_64-linux = {
           file = "plannotator-linux-x64";
-          hash = "sha256-R5uicXyqLad+Lhiwo9YfQldHzl+mh7JBN4Qr1VV09m0=";
+          hash = "sha256-ldslSssqmW6w2DKJq7uR384rDd7jeLY3UgXj6CUajbA=";
         };
         aarch64-linux = {
           file = "plannotator-linux-arm64";
-          hash = "sha256-5gP6u+lFk4v06fwvAuwEEs9wZlhZ/+PKAUwiHIKqEBk=";
+          hash = "sha256-XrvW0VEwwmM7+pspUxIFfoJ3lUqY9ALbZesSSzHnCE0=";
         };
         aarch64-darwin = {
           file = "plannotator-darwin-arm64";
-          hash = "sha256-8LLfK1XZXJaRKJHOmbK72skY3y1jVMSmZJ5V+ExdcCk=";
+          hash = "sha256-Hp9w9FTTkwKPLW/hLaiqq5MbNZH9NBqtNCgP8ZgepNA=";
         };
         x86_64-darwin = {
           file = "plannotator-darwin-x64";
-          hash = "sha256-QWE/o4mpnXKCmw8IRMPVu8yMprcK1OHuJKvY6KM1dtc=";
+          hash = "sha256-jGyTq+4m6BSvS50ddyDKk7Ez64JLis2YTd2cMUHGFHk=";
         };
       };
       plannotatorAsset =
         plannotatorAssets.${system} or (throw "plannotator: unsupported system ${system}");
 
-      semVersion = "0.8.0";
-      # upstream は darwin-x64 向けの sem をリリースしていないため、asset が
-      # ない環境では同梱をスキップする (semantic diff だけが無効になる)。
+      semVersion = "0.24.0";
+      # plannotator が対応する 4 プラットフォーム分の asset が揃っているが、
+      # upstream が asset を落とした環境でも壊れないよう、asset が無ければ
+      # 同梱をスキップする (semantic diff だけが無効になる)。
       semAssets = {
         x86_64-linux = {
           file = "sem-linux-x86_64.tar.gz";
-          hash = "sha256-00dkl9jlZI3bSqb4L3WtGiHQFVpZQXRMdE9GQQmShwc=";
+          hash = "sha256-kPMbZ6NRqi7GSSFn01xWNukSi+6cUoUpIZQjwUaDGk4=";
         };
         aarch64-linux = {
           file = "sem-linux-arm64.tar.gz";
-          hash = "sha256-wNTM7eVeFmSBNYATw5fydy5Ndrct9F1WfEV5K4Azrsk=";
+          hash = "sha256-LQPRsIzzSiif5yQTKA+5/Of8PZ752jCy6kf7zab3gFA=";
         };
         aarch64-darwin = {
           file = "sem-darwin-arm64.tar.gz";
-          hash = "sha256-qYI1rJ+PrpM2Tdt8aBA2++M691bbQOBnMx7yCR7Mjmo=";
+          hash = "sha256-UBtOWp3ov0jUIvHjfwS+RsqGeoH6WJg0k+k4E2TxqiA=";
+        };
+        x86_64-darwin = {
+          file = "sem-darwin-x86_64.tar.gz";
+          hash = "sha256-MAbhvDQjQhNtf0Hk68uC9WqZ37IHv9hoxVDa/uk9iZg=";
         };
       };
 
@@ -123,7 +128,7 @@
         repo = "plannotator";
         rev = "v${plannotatorVersion}";
         sparseCheckout = [ "apps/skills" ];
-        hash = "sha256-b2yF5FJRNayct5wlA9hO7FrrGerIvvyRxCxN39RUvU4=";
+        hash = "sha256-hy0zBci75drcVSt/TdzSn6QulyW2ZiGahS20oAMfeWg=";
       };
 
       # Claude Code 用: 3 つは claude 専用本文、リファレンスの plannotator だけ
