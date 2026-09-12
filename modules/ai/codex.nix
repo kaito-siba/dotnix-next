@@ -1,33 +1,24 @@
 {
-  # OpenAI Codex CLI, taken from the upstream musl release binary, plus its
-  # home directory config and bubblewrap for sandboxed runs.
+  # OpenAI Codex CLI, plus its home directory config and bubblewrap for
+  # sandboxed runs.
+  #
+  # 以前は upstream の musl リリースバイナリを手で pin していたが、nixpkgs
+  # に収録されたのでそちらに寄せた。hash 更新が要らず、cache.nixos.org に
+  # ビルド済みが載っていて、codex 本体に加えて codex-code-mode-host と
+  # シェル補完まで入る。stable (26.05) は追従が遅いので unstable から取る。
   flake.modules.homeManager.ai =
-    { pkgs, ... }:
-    let
-      codex-rs = pkgs.stdenv.mkDerivation rec {
-        pname = "codex";
-        version = "0.154.0";
-
-        src = pkgs.fetchurl {
-          url = "https://github.com/openai/codex/releases/download/rust-v${version}/codex-x86_64-unknown-linux-musl.tar.gz";
-          sha256 = "sha256-1+GLJZeujyQvXzHunpDe70jbye3WNNmGj7ZDXQjAfwI=";
-        };
-
-        dontUnpack = true;
-
-        installPhase = ''
-          mkdir -p $out/bin
-          tar -xzf $src -C $out/bin
-          mv $out/bin/codex-x86_64-unknown-linux-musl $out/bin/codex
-          chmod +x $out/bin/codex
-        '';
-      };
-    in
+    {
+      lib,
+      pkgs,
+      pkgs-unstable,
+      ...
+    }:
     {
       home.packages = [
-        codex-rs
-        pkgs.bubblewrap # for sandboxing codex
-      ];
+        pkgs-unstable.codex
+      ]
+      # bubblewrap は Linux 専用。darwin では codex が Seatbelt を使う。
+      ++ lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.bubblewrap;
 
       home.file.".codex/" = {
         source = ./codex-home;
