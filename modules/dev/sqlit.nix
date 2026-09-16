@@ -42,8 +42,17 @@
             --prefix PYTHONPATH : ${driverPath}
         '';
       };
+
+      # ~/.config/sqlit/keymap.json: 既定キーマップへの差分のみを書く。
+      keymap = {
+        keymap.action_keys = {
+          query_normal.edit_query_in_editor = "ctrl+g";
+        };
+      };
     in
     {
       home.packages = [ sqlitWithDrivers ];
+
+      xdg.configFile."sqlit/keymap.json".text = builtins.toJSON keymap;
     };
 }
