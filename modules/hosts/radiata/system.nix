@@ -4,6 +4,8 @@
     # This host was installed on 24.11; never bump stateVersion in place.
     system.stateVersion = lib.mkForce "24.11";
 
+    nas.uid = 1000; # rkv12
+
     programs.nh.flake = "/home/rkv12/repos/github.com/kaito-siba/dotnix-next";
 
     # Auto-login target for the tuigreet session configured in modules/niri.

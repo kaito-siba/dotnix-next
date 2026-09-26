@@ -25,6 +25,9 @@ in
         # Compatibility for non-nix binaries (incl. mason-installed LSPs)
         compat
 
+        # Storage
+        nas
+
         # Users
         w963n
       ]

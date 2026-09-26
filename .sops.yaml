@@ -5,6 +5,8 @@ keys:
   - &radiata age1qg6xe4yc55xte5606x2d99rmlqar0gt2ckqjqfryp6qmsgwq544qdnjwrt
   - &albiflora age1m869k2r20z7487gc3adxhqdnmv3y9m9u6xkh5jffskxmcvrgrdjqkn3s6v
   - &albiflora-w963n age1y67vyxzll5wgckz533j6u8lwjcjzdzsrdwnwmndpwvm5ez6fyg3qax5vr0
+  - &sanguinea age1umtc8n4yy6vvm6h7za4dhmks2es04ytpa7gmnywt5yh25fp0m9jquggqq9
+  - &sanguinea-w963n age1ck2yqk7mlhfczdkq5xrgu0jqatjacgafrl4ha2cjzsdfqqnpjyssvmeqme
 
 creation_rules:
   - path_regex: modules/searxng/secrets/.*
@@ -16,6 +18,6 @@ creation_rules:
   - path_regex: modules/hosts/albiflora/secrets/.*
     key_groups:
       - age: [ *albiflora, *squamigera-admin ]
-  - path_regex: modules/hosts/radiata/secrets/.*
+  - path_regex: modules/nas/secrets/.*
     key_groups:
-      - age: [ *radiata, *radiata-rkv12, *squamigera-admin ]
+      - age: [ *radiata, *radiata-rkv12, *sanguinea, *sanguinea-w963n, *squamigera-admin ]
