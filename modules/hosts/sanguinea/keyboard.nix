@@ -14,12 +14,19 @@
           "Alt_L" = {
             held = "Super_L";
             alone = "Muhenkan";
-            alone_timeout_mills = 200;
+            alone_timeout_millis = 200;
           };
           "Alt_R" = {
-            held = "Alt_R";
+            held = "Super_R";
             alone = "Hiragana";
-            alone_timeout_mills = 200;
+            alone_timeout_millis = 200;
+          };
+
+          # The Copilot key sends Super_L + Shift_L + F23, and Super_L is already remapped to Alt_L above.
+          # Drop F23 and release Shift_L so that only Alt_L stays held.
+          "F23" = {
+            skip_key_event = true;
+            press = [ { release = "Shift_L"; } ];
           };
         };
       }

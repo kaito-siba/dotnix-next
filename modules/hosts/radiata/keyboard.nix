@@ -16,12 +16,12 @@
           "Super_L" = {
             held = "Super_L";
             alone = "Muhenkan";
-            alone_timeout_mills = 200;
+            alone_timeout_millis = 200;
           };
           "Super_R" = {
             held = "Super_R";
             alone = "Hiragana";
-            alone_timeout_mills = 200;
+            alone_timeout_millis = 200;
           };
         };
       }
