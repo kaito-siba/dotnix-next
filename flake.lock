@@ -37,6 +37,22 @@
         "type": "github"
       }
     },
+    "fievel": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790205745,
+        "narHash": "sha256-IjJ7ceHly/Hr+BpVnjGCeCZpsjz9mu3yP7xkFTsrBPk=",
+        "owner": "MontyTheSoftwareEngineer",
+        "repo": "fievel",
+        "rev": "68fab8f80230884e1cbe7d8e3f18198f1b8e999b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "MontyTheSoftwareEngineer",
+        "repo": "fievel",
+        "type": "github"
+      }
+    },
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": [
@@ -307,6 +323,7 @@
     "root": {
       "inputs": {
         "claude-code": "claude-code",
+        "fievel": "fievel",
         "flake-parts": "flake-parts",
         "herdr": "herdr",
         "home-manager": "home-manager",

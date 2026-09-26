@@ -21,6 +21,7 @@ in
         fonts
         printing
         xremap
+        fievel
 
         # Compatibility for non-nix binaries (incl. mason-installed LSPs)
         compat
@@ -54,6 +55,7 @@ in
             # Desktop session
             hm."desktop/linux"
             hm.noctalia
+            hm.fievel
 
             # Desktop applications
             hm.zen-browser

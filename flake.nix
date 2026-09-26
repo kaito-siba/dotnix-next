@@ -70,6 +70,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # キーボードでマウス操作するツール。flake を持たないのでソースだけ取り込み、
+    # modules/fievel でビルドする。`nix flake update fievel` で追従する。
+    fievel = {
+      url = "github:MontyTheSoftwareEngineer/fievel";
+      flake = false;
+    };
+
   };
 
   outputs =

@@ -20,6 +20,7 @@ in
         bluetooth
         fonts
         xremap
+        fievel
 
         # Hardware
         nvidia
@@ -57,6 +58,7 @@ in
             # Desktop session
             hm."desktop/linux"
             hm.noctalia
+            hm.fievel
 
             # Desktop applications
             hm.zen-browser

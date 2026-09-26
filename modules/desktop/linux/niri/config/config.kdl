@@ -408,7 +408,7 @@ binds {
     Super+O { spawn "obsidian"; }
     Super+S { spawn "slack"; }
     Super+D { spawn "vesktop"; }
-    Super+Space { spawn-sh "noctalia msg panel-toggle launcher"; }
+    Alt+Space { spawn-sh "noctalia msg panel-toggle launcher"; }
     Super+V { spawn-sh "noctalia msg panel-toggle clipboard"; }
     Super+Alt+L { spawn-sh "noctalia msg session lock"; }
 
