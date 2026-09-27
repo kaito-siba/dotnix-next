@@ -29,6 +29,9 @@ in
         # Storage
         nas
 
+        # Entertainment
+        gaming
+
         # Users
         w963n
       ]
