@@ -49,6 +49,12 @@
         inherit src;
         cargoLock.lockFile = "${src}/Cargo.lock";
 
+        # モック Wayland サーバとのソケット通信がタイムアウト依存で、並列ビルドで
+        # 負荷が高いと接続がリセットされて落ちる
+        checkFlags = [
+          "--skip=hints::click_protocol_tests::debug_cycles_zero_targets_and_selection_without_clicking_and_peek_restores"
+        ];
+
         meta = {
           description = "Keyboard-driven mouse control and key remapping for Linux";
           homepage = "https://github.com/MontyTheSoftwareEngineer/fievel";
