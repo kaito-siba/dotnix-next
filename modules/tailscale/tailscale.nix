@@ -10,10 +10,11 @@
       enable = true;
       openFirewall = true;
       useRoutingFeatures = "client";
-      extraUpFlags = [ "--accept-dns=true" ];
       extraSetFlags = [
         "--ssh"
         "--operator=$USER"
+        "--accept-routes"
+        "--accept-dns=true"
       ];
     };
   };
