@@ -5,17 +5,26 @@
       # `default` bundles all driver extras, including snowflake, whose
       # snowflake-connector-python fails its test suite on Python 3.14.
       # Build via makeSqlit with every extra except snowflake to avoid it.
-      sqlitPkg = inputs.sqlit.lib.${pkgs.stdenv.hostPlatform.system}.makeSqlit {
-        extras = [
-          "ssh"
-          "postgres"
-          "cockroachdb"
-          "mysql"
-          "duckdb"
-          "bigquery"
-          "d1"
-        ];
-      };
+      sqlitPkg =
+        (inputs.sqlit.lib.${pkgs.stdenv.hostPlatform.system}.makeSqlit {
+          extras = [
+            "ssh"
+            "postgres"
+            "cockroachdb"
+            "mysql"
+            "duckdb"
+            "bigquery"
+            "d1"
+          ];
+        }).overrideAttrs
+          (o: {
+            # nixpkgs の buildPythonPackage が __structuredAttrs = true になり、
+            # 上流 flake が属性として渡す SETUPTOOLS_SCM_PRETEND_VERSION が
+            # export されず build backend から見えなくなった。明示的に export する。
+            preBuild = (o.preBuild or "") + ''
+              export SETUPTOOLS_SCM_PRETEND_VERSION=${o.version}
+            '';
+          });
 
       sqlitPython =
         if sqlitPkg ? python then
