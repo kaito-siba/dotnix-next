@@ -49,10 +49,12 @@
         inherit src;
         cargoLock.lockFile = "${src}/Cargo.lock";
 
-        # モック Wayland サーバとのソケット通信がタイムアウト依存で、並列ビルドで
-        # 負荷が高いと接続がリセットされて落ちる
+        # hints::click_protocol_tests はモック Wayland サーバとのソケット通信が
+        # タイムアウト依存で、並列ビルドで負荷が高いと接続リセット / BrokenPipe で
+        # 落ちる（単体ビルドでは通る）。個別 skip では別テストが順に落ちるため
+        # モジュールごと skip する
         checkFlags = [
-          "--skip=hints::click_protocol_tests::debug_cycles_zero_targets_and_selection_without_clicking_and_peek_restores"
+          "--skip=hints::click_protocol_tests::"
           # 1.2.0 (colored/underlined links 対応) で検出ロジックが変わったが
           # テストの期待値が追随しておらず、決定的に失敗する。upstream に CI はない
           "--skip=detect::tests::icon_fallback_respects_size_limits_and_does_not_duplicate_standalone_icons"
