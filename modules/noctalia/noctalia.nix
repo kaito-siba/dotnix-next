@@ -101,6 +101,15 @@ in
               automation.enabled = true;
             };
 
+            # niri の overview で壁紙を blur + tint して backdrop に描く。
+            # v4 の noctalia-overview 相当。niri 側の layer-rule
+            # (namespace ^noctalia-backdrop) とセットで効く。
+            backdrop = {
+              enabled = true;
+              blur_intensity = 0.5;
+              tint_intensity = 0.3;
+            };
+
             # 左 control-center / 中央 workspaces+media / 右 システム系 + 時計 +
             # 通知。vibe-island は自作プラグインの島。
             #
