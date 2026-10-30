@@ -44,6 +44,7 @@ in
             # Development
             hm.dev
             hm.vscode
+            hm.ai
 
             # Time tracking
             hm.activitywatch
