@@ -1,0 +1,83 @@
+# Overrides only; see https://github.com/qeude/Defi/blob/main/CONFIGURATION.md
+# for the defaults. Ported from the OmniWM settings: the niri muscle memory on
+# Option (Alt+HJKL, Alt+R width presets, Alt+O overview...).
+
+# Every generated default binding moves from Ctrl+Alt to Alt, so Alt+arrows,
+# Alt+1..9, Alt+O, Alt+F, Alt+C, Alt+minus/equal etc. work as generated.
+default_key_modifier = "alt"
+
+[layout]
+default_column_width = 0.5
+preset_column_widths = [0.3333, 0.5, 0.6667]
+center_focused_column = "never"
+gaps = 6
+# Room for SketchyBar at the top; no gap on the other screen edges.
+outer_top_gap = 3
+outer_right_gap = 3
+outer_bottom_gap = 3
+outer_left_gap = 3
+
+[input]
+focus_follows_mouse = false
+mouse_follows_focus = true
+
+# [overview]
+# window_previews = false
+#
+# [animation]
+# enabled = false
+
+[decorations.borders]
+width = 2
+color = "#FF45382C" # #AARRGGBB: alpha first, 8 digits required
+
+[keys]
+# Focus / move within the strip (j/k come from the generated defaults).
+"alt-h" = "focus-column left"
+"alt-l" = "focus-column right"
+"alt-shift-h" = "move-column left"
+"alt-shift-l" = "move-column right"
+
+# Workspaces: U = next (down), I = previous (up).
+"alt-u" = "focus-workspace down"
+"alt-i" = "focus-workspace up"
+"ctrl-alt-u" = "move-column-to-workspace down"
+"ctrl-alt-i" = "move-column-to-workspace up"
+"ctrl-alt-shift-down" = "move-window-to-workspace down"
+"ctrl-alt-shift-up" = "move-window-to-workspace up"
+
+# Alt+Shift+N moves the window, Ctrl+Alt+N the whole column.
+"alt-shift-1" = "move-window-to-workspace-position 1"
+"alt-shift-2" = "move-window-to-workspace-position 2"
+"alt-shift-3" = "move-window-to-workspace-position 3"
+"alt-shift-4" = "move-window-to-workspace-position 4"
+"alt-shift-5" = "move-window-to-workspace-position 5"
+"alt-shift-6" = "move-window-to-workspace-position 6"
+"alt-shift-7" = "move-window-to-workspace-position 7"
+"alt-shift-8" = "move-window-to-workspace-position 8"
+"alt-shift-9" = "move-window-to-workspace-position 9"
+"ctrl-alt-1" = "move-column-to-workspace-position 1"
+"ctrl-alt-2" = "move-column-to-workspace-position 2"
+"ctrl-alt-3" = "move-column-to-workspace-position 3"
+"ctrl-alt-4" = "move-column-to-workspace-position 4"
+"ctrl-alt-5" = "move-column-to-workspace-position 5"
+"ctrl-alt-6" = "move-column-to-workspace-position 6"
+"ctrl-alt-7" = "move-column-to-workspace-position 7"
+"ctrl-alt-8" = "move-column-to-workspace-position 8"
+"ctrl-alt-9" = "move-column-to-workspace-position 9"
+
+# Stacking: niri's consume / expel.
+"alt-comma" = "join-window left"
+"alt-period" = "unjoin-windows"
+
+# Width presets on R (the generated alt-r is unjoin, now on alt-period).
+"alt-r" = "cycle-width next"
+"alt-v" = "toggle-floating"
+
+# Monitors: the ultrawide sits above the built-in display.
+"ctrl-alt-j" = "focus-monitor down"
+"ctrl-alt-k" = "focus-monitor up"
+"ctrl-alt-shift-h" = "move-window-to-monitor left"
+"ctrl-alt-shift-j" = "move-window-to-monitor down"
+"ctrl-alt-shift-k" = "move-window-to-monitor up"
+"ctrl-alt-shift-l" = "move-window-to-monitor right"

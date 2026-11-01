@@ -14,7 +14,7 @@ source "$HOME/.config/sketchybar/icons.sh"
 PLUGIN_DIR="$HOME/.config/sketchybar/plugins"
 SPOTIFY_EVENT="com.spotify.client.PlaybackStateChanged"
 POPUP_CLICK_SCRIPT="sketchybar --set \$NAME popup.drawing=toggle"
-# No workspace widget: OmniWM's overview (Alt+O) covers orientation, so the
+# No workspace widget: Defi's overview (Alt+O) covers orientation, so the
 # bar does not track the active workspace at all.
 
 # Color definitions
