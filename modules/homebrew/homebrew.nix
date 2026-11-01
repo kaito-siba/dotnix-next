@@ -56,9 +56,6 @@
           # Design
           "figma"
 
-          # Hardware and peripherals
-          "fujitsu-scansnap-home"
-
           # AI
           "claude"
         ];
