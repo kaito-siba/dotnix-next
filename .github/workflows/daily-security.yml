@@ -34,12 +34,11 @@ jobs:
         with:
           extra_nix_config: |
             accept-flake-config = false
-      - name: NVD feed cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/vulnix
-          key: vulnix-nvd-${{ github.run_id }}
-          restore-keys: vulnix-nvd-
+      # No NVD cache on purpose. With a day-old cache vulnix fetches only the
+      # "modified" feed, which NVD regenerates every two hours and which 404s
+      # around each regeneration. An empty cache makes it fetch the yearly
+      # feeds instead (~400 MB, about a minute), and those are regenerated
+      # once a day at 08:00 UTC, far from this job's 00:30 UTC.
       - name: closure of every host
         run: python3 security/scripts/closure.py /tmp/closure.json
       - name: earlier results (persistence rule)

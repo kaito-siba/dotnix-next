@@ -46,8 +46,12 @@ nix shell --inputs-from . nixpkgs#vulnix -c \
   python3 security/scripts/scan.py --closure /tmp/closure.json --lock flake.lock --out /tmp/results.json
 ```
 
+## NVD の時間帯
+
+NVD のフィードは `modified` / `recent` が 2 時間ごと、年次が 1 日 1 回 08:00 UTC 頃に再生成され、再生成の前後は 404 を返す。vulnix はキャッシュが 2 時間〜7 日の古さだと `modified` だけを取りに行くので、CI ではキャッシュを持たず毎回年次フィードを取り直す (00:30 UTC 実行なので年次の再生成とは重ならない)。それでも失敗したときは scan.py がフレッシュキャッシュで 1 回リトライし、駄目なら vulnix 抜きで続行する。
+
 ## 限界
 
-- vulnix は名前と version の CPE 照合なので誤検知が多い。whitelist と baseline で吸収する前提。
+- vulnix は名前と version の CPE 照合なので誤検知が多い。whitelist と baseline で吸収する前提。直近 5 年分の NVD しか読まないので、それより古い CVE は見ない。
 - GitHub advisories は「存在する」ことしか見ない。affected range の判定は人間。
 - upstream が advisory も CVE も出さないケースは拾えない。冷却期間が唯一の防御。
