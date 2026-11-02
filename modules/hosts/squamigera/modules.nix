@@ -33,7 +33,6 @@ in
             # Desktop applications
             hm.appcleaner
             hm.video-player
-            hm.mail
             hm.smoothcsv
             hm.vesktop
 

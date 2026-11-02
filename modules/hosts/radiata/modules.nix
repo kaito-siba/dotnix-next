@@ -48,8 +48,6 @@ in
             hm.claude-code
             hm.ai
             hm.llama
-            hm.calendar
-            hm.rbw
 
             # Terminal
             hm.ghostty
@@ -63,9 +61,7 @@ in
             hm.zen-browser
             hm.chromium
             hm.slack
-            hm.mail
             hm.vesktop
-            hm.vscode
             hm.obs
             hm.onlyoffice
             hm.smoothcsv

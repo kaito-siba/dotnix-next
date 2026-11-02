@@ -9,7 +9,7 @@
     {
       home.packages = with pkgs; [
         # json / yaml / toml
-        vscode-langservers-extracted # jsonls
+        vscode-langservers-extracted # jsonls, eslint, cssls, html
         yaml-language-server
         taplo
 
