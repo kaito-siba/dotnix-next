@@ -37,6 +37,11 @@ import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
+try:
+    from cvss import CVSS3, CVSS4  # nixpkgs python3Packages.cvss, see modules/ci/security-shell.nix
+except ImportError:  # label fallback only; the summary says so per finding
+    CVSS3 = CVSS4 = None
+
 ROOT = Path(__file__).resolve().parent.parent  # security/
 VULNIX_ATTEMPTS = 3
 VULNIX_RETRY_SECONDS = 300
@@ -115,6 +120,7 @@ def run_vulnix(merged, whitelist):
             "version": item["version"],
             "ids": sorted(item["affected_by"]),
             "severity": sev,
+            "severity_how": "nvd",
             "hosts": hosts,
             "detail": "",
         })
@@ -139,6 +145,33 @@ def osv_queries(merged, extra):
             if d["pname"] == e["pname"] and d["version"]:
                 queries[(e["ecosystem"], e["name"], d["version"])] = d["hosts"]
     return queries
+
+
+SEVERITY_LABELS = {"CRITICAL": 9.5, "HIGH": 8.0, "MODERATE": 5.0, "MEDIUM": 5.0, "LOW": 2.0}
+
+
+def osv_severity(det):
+    """(score, how) for one OSV record.
+
+    OSV's `severity[].score` is a CVSS vector, not a number; it is computed
+    with the cvss library when available (how = cvss4 / cvss3). Records
+    without a vector, or runs without the library, fall back to the word in
+    database_specific.severity (how = label), else (0.0, none). `how` is
+    carried into the report so a fallback is visible, not silent.
+    """
+    for sv in det.get("severity") or []:
+        vec = sv.get("score", "")
+        try:
+            if sv.get("type") == "CVSS_V4" and CVSS4 and vec.startswith("CVSS:4"):
+                return float(CVSS4(vec).base_score), "cvss4"
+            if sv.get("type") == "CVSS_V3" and CVSS3 and vec.startswith("CVSS:3"):
+                return float(CVSS3(vec).scores()[0]), "cvss3"
+        except Exception:  # noqa: BLE001 - malformed vector
+            continue
+    word = str((det.get("database_specific") or {}).get("severity") or "").upper()
+    if word in SEVERITY_LABELS:
+        return SEVERITY_LABELS[word], "label"
+    return 0.0, "none"
 
 
 def osv_post(path, body):
@@ -172,7 +205,7 @@ def run_osv(merged, extra):
             if not vulns:
                 continue
             ids = sorted(x["id"] for x in vulns)
-            sev = 0.0
+            sev, how = 0.0, "none"
             summaries = []
             for vid in ids:
                 if vid not in detail_cache:
@@ -181,10 +214,9 @@ def run_osv(merged, extra):
                     except Exception:  # noqa: BLE001
                         detail_cache[vid] = {}
                 det = detail_cache[vid]
-                # OSV carries CVSS vectors, not scores; the GHSA-derived
-                # records put a word in database_specific.severity.
-                word = (det.get("database_specific") or {}).get("severity", "")
-                sev = max(sev, {"CRITICAL": 9.5, "HIGH": 8.0, "MODERATE": 5.0, "MEDIUM": 5.0, "LOW": 2.0}.get(str(word).upper(), 0.0))
+                score, score_how = osv_severity(det)
+                if score > sev or (score == sev and how == "none"):
+                    sev, how = score, score_how
                 if det.get("summary"):
                     summaries.append(f"{vid}: {det['summary']}")
             malicious = any(x["id"].startswith("MAL-") for x in vulns)
@@ -195,6 +227,7 @@ def run_osv(merged, extra):
                 "version": v,
                 "ids": ids,
                 "severity": 10.0 if malicious else sev,
+                "severity_how": "malicious" if malicious else how,
                 "hosts": sorted(set(queries[(eco, n, v)])),
                 "detail": ("MALICIOUS PACKAGE. " if malicious else "") + "\n".join(summaries)[:2000],
             })
@@ -234,6 +267,7 @@ def run_ghsa(lock):
                 "version": "",
                 "ids": [x for x in (adv.get("ghsa_id"), adv.get("cve_id")) if x],
                 "severity": sev,
+                "severity_how": "label",
                 "hosts": [],
                 "detail": f"{adv.get('summary', '')} (published {adv.get('published_at', '')[:10]}) {adv.get('html_url', '')}",
             })
@@ -297,7 +331,7 @@ def sync_issues(findings, dry_run):
             f"<!-- key: {key} -->",
             f"**source**: {f['source']}  ",
             f"**package**: {f['pname']} {f['version']}  ",
-            f"**severity**: {f['severity']}  ",
+            f"**severity**: {f['severity']} ({f.get('severity_how', '?')})  ",
             f"**hosts**: {', '.join(f['hosts']) or '-'}  ",
             f"**ids**: {', '.join(f['ids'])}",
             "",
@@ -335,6 +369,8 @@ def summarize(findings, new, persistent, fastlane, stats, cfg):
         lines.append("| attribute | locked nixpkgs | channel HEAD |\n|---|---|---|")
         lines.extend(f"| {p} | {a} | {b} |" for p, a, b in fastlane)
         lines.append("")
+    lines.append("severity: nvd = NVD の CVSS v3、cvss3 / cvss4 = OSV のベクトルから計算、label = CRITICAL/HIGH/MODERATE/LOW の語からの代表値 (fallback)、none = 情報なし")
+    lines.append("")
     lines.append("## New findings (not in baseline)")
     lines.append("")
     if not new:
@@ -343,13 +379,13 @@ def summarize(findings, new, persistent, fastlane, stats, cfg):
         lines.append("| sev | source | package | ids | hosts |\n|---|---|---|---|---|")
         for f in sorted(new, key=lambda f: -f["severity"]):
             ids = ", ".join(f["ids"][:6]) + (" …" if len(f["ids"]) > 6 else "")
-            lines.append(f"| {sevname(f['severity'])} {f['severity']:.1f} | {f['source']} | {f['pname']} {f['version']} | {ids} | {', '.join(f['hosts'][:3])} |")
+            lines.append(f"| {sevname(f['severity'])} {f['severity']:.1f} ({f.get('severity_how', '?')}) | {f['source']} | {f['pname']} {f['version']} | {ids} | {', '.join(f['hosts'][:3])} |")
     lines.append("")
     lines.append("<details><summary>All findings</summary>\n")
     lines.append("| sev | source | package | ids |\n|---|---|---|---|")
     for f in sorted(findings, key=lambda f: -f["severity"]):
         ids = ", ".join(f["ids"][:4]) + (" …" if len(f["ids"]) > 4 else "")
-        lines.append(f"| {f['severity']:.1f} | {f['source']} | {f['pname']} {f['version']} | {ids} |")
+        lines.append(f"| {f['severity']:.1f} ({f.get('severity_how', '?')}) | {f['source']} | {f['pname']} {f['version']} | {ids} |")
     lines.append("\n</details>")
     return "\n".join(lines)
 

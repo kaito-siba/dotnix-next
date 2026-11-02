@@ -42,7 +42,7 @@
 ```sh
 python3 security/scripts/closure.py /tmp/closure.json
 python3 security/scripts/cooling.py flake.lock
-nix shell --inputs-from . nixpkgs#vulnix -c \
+nix develop .#security -c \
   python3 security/scripts/scan.py --closure /tmp/closure.json --lock flake.lock --out /tmp/results.json
 ```
 
@@ -54,4 +54,5 @@ NVD のフィードは `modified` / `recent` が 2 時間ごと、年次が 1 �
 
 - vulnix は名前と version の CPE 照合なので誤検知が多い。whitelist と baseline で吸収する前提。直近 5 年分の NVD しか読まないので、それより古い CVE は見ない。
 - GitHub advisories は「存在する」ことしか見ない。affected range の判定は人間。
+- severity は出所つきで出す (nvd / cvss3 / cvss4 / label / none)。label は CVSS ベクトルが無いときの代表値で、PYSEC 単独のレコードなどは none になる。
 - upstream が advisory も CVE も出さないケースは拾えない。冷却期間が唯一の防御。

@@ -55,7 +55,7 @@ jobs:
           flags=""
           if [ "${{ vars.SECURITY_ISSUES }}" = "true" ] || [ "${{ inputs.issues }}" = "true" ]; then flags="$flags --issues"; fi
           if [ "${{ vars.SECURITY_FASTLANE }}" = "true" ]; then flags="$flags --fastlane"; fi
-          nix shell --inputs-from . nixpkgs#vulnix -c \
+          nix develop .#security -c \
             python3 security/scripts/scan.py --closure /tmp/closure.json --lock flake.lock \
               --out "results/$(date -u +%F).json" --history /tmp/history --summary /tmp/summary.md $flags
           cat /tmp/summary.md >> "$GITHUB_STEP_SUMMARY"
