@@ -9,7 +9,8 @@
         src = pkgs.fetchFromGitHub {
           owner = "sinzin91";
           repo = "search-sessions";
-          rev = "v0.3.1";
+          # v0.3.1; the tag is pinned as a commit so it cannot be moved upstream.
+          rev = "6d5906f07a6ea2b2a871271d9f3074157602d15f";
           hash = "sha256-Svsi3KrkO/zHhoSHdTNNmF7Lse8nd96d6ZLABto3wSA=";
         };
 

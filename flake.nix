@@ -1,6 +1,16 @@
 {
   description = "brand-new nix configuration";
 
+  # 更新経路の層分け (供給網対策)。
+  #   stable     : nixpkgs (nixos-26.05)。ほぼ全部ここから。stable channel の
+  #                遅延と backport レビューが冷却期間を兼ねる。
+  #   例外       : nixpkgs-unstable から取るのは keifu / yt-dlp / codex と
+  #                claude-code だけ。更新は週 1 の CI PR 経由で、新 rev が 7 日
+  #                未満なら CI が落とす。
+  #   直接 input : 下の nixpkgs 以外の flake input。lock で rev 固定、同じ
+  #                冷却チェックの対象。inputs.nixpkgs.follows は stable に揃える。
+  #   バイナリ pin: URL に commit を書いたもの (look) と fetchurl の hash 固定
+  #                (defi / smoothcsv)。`nix flake update` では動かず手で上げる。
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -30,7 +40,7 @@
 
     claude-code = {
       url = "github:sadjow/claude-code-nix?ref=latest";
-      inputs.nixpkgs.follows = "nixpkgs-unstable";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     sops-nix = {
@@ -40,7 +50,7 @@
 
     herdr = {
       url = "github:ogulcancelik/herdr";
-      inputs.nixpkgs.follows = "nixpkgs-unstable";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # v5 (C++ native rewrite). Deliberately does NOT follow our nixpkgs:
@@ -50,17 +60,17 @@
 
     xremap = {
       url = "github:xremap/nix-flake";
-      inputs.nixpkgs.follows = "nixpkgs-unstable";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     zen-browser = {
       url = "github:0xc000022070/zen-browser-flake";
-      inputs.nixpkgs.follows = "nixpkgs-unstable";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     sqlit = {
       url = "github:Maxteabag/sqlit";
-      inputs.nixpkgs.follows = "nixpkgs-unstable";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # Thermalright の LCD/LED コントロールセンター。リリースタグ v9.9.5 より後に

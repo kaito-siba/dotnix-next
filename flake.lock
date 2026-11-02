@@ -3,7 +3,7 @@
     "claude-code": {
       "inputs": {
         "nixpkgs": [
-          "nixpkgs-unstable"
+          "nixpkgs"
         ],
         "systems": "systems"
       },
@@ -130,7 +130,7 @@
     "herdr": {
       "inputs": {
         "nixpkgs": [
-          "nixpkgs-unstable"
+          "nixpkgs"
         ],
         "rust-overlay": "rust-overlay"
       },
@@ -429,7 +429,7 @@
       "inputs": {
         "flake-utils": "flake-utils",
         "nixpkgs": [
-          "nixpkgs-unstable"
+          "nixpkgs"
         ]
       },
       "locked": {
@@ -517,7 +517,7 @@
         "crane": "crane",
         "flake-parts": "flake-parts_2",
         "nixpkgs": [
-          "nixpkgs-unstable"
+          "nixpkgs"
         ],
         "xremap": "xremap_2"
       },
@@ -556,7 +556,7 @@
       "inputs": {
         "home-manager": "home-manager_2",
         "nixpkgs": [
-          "nixpkgs-unstable"
+          "nixpkgs"
         ]
       },
       "locked": {
