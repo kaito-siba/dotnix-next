@@ -1,6 +1,15 @@
 # security/
 
-供給網対策の運用部分。方針そのものは flake.nix 冒頭のコメントにある。
+供給網対策の運用部分。
+
+## 方針
+
+| 層 | 対象 | 更新 |
+|---|---|---|
+| stable | nixpkgs (nixos-26.05)。ほぼ全部 | 週 1 の CI PR、自動 merge |
+| 例外 | nixpkgs-unstable から取る keifu / yt-dlp / codex、claude-code | 週 1 の CI PR、冷却 7 日 |
+| 直接 input | nixpkgs 以外の flake input。`inputs.nixpkgs.follows` は stable | 同上 |
+| バイナリ pin | URL に commit を書いた input (look)、fetchurl の hash 固定 (defi / smoothcsv) | 手で上げる |
 
 ## 何が動くか
 
