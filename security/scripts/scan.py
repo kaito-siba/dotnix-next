@@ -31,12 +31,15 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent  # security/
+VULNIX_ATTEMPTS = 3
+VULNIX_RETRY_SECONDS = 300
 
 
 class ScannerError(Exception):
@@ -87,17 +90,16 @@ def run_vulnix(merged, whitelist):
     cmd = ["vulnix", "--no-requisites", "--from-file", listfile, "--json"]
     if whitelist.exists():
         cmd += ["--whitelist", str(whitelist)]
-    r = sh(*cmd, check=False)
-    if r.returncode not in (0, 2):
-        # A cache that is between 2 hours and 7 days old makes vulnix fetch
-        # NVD's "modified" feed, which 404s whenever NVD regenerates it. A
-        # fresh cache only needs the yearly feeds, so retry with one before
-        # giving up; the summary says so when even that fails.
-        fresh = tempfile.mkdtemp(prefix="vulnix-cache-")
-        r = sh(*cmd, "--cache-dir", fresh, check=False)
-        if r.returncode not in (0, 2):
-            last = r.stderr.strip().splitlines()[-1] if r.stderr.strip() else ""
-            raise ScannerError(f"vulnix failed ({r.returncode}): {last}")
+    # NVD serves 404 around feed regeneration; a plain retry covers that.
+    for attempt in range(VULNIX_ATTEMPTS):
+        r = sh(*cmd, check=False)
+        if r.returncode in (0, 2):
+            break
+        if attempt + 1 < VULNIX_ATTEMPTS:
+            time.sleep(VULNIX_RETRY_SECONDS)
+    else:
+        last = r.stderr.strip().splitlines()[-1] if r.stderr.strip() else ""
+        raise ScannerError(f"vulnix failed after {VULNIX_ATTEMPTS} attempts ({r.returncode}): {last}")
     by_name = defaultdict(list)
     for d in merged.values():
         by_name[d["name"]].append(d)
