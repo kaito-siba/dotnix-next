@@ -13,7 +13,6 @@
           mise # some team projects use it as their task runner
         ])
         ++ (with pkgs-unstable; [
-          # One of the few packages allowed from unstable (see flake.nix):
           # stable ships 0.3 against upstream's 0.7.
           keifu # git commit graph TUI
         ]);

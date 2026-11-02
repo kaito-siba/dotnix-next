@@ -1,18 +1,14 @@
 {
-  # Network debugging: intercepting proxy, tunnels and packet capture.
-  flake.modules = {
-    homeManager.dev =
-      { pkgs, ... }:
-      {
-        home.packages = with pkgs; [
-          cloudflared
-          mitmproxy
-        ];
-      };
-
-    # Wireshark stays a cask: capturing needs the ChmodBPF launch daemon whose
-    # installer ships inside the app bundle, which the nixpkgs build cannot
-    # set up.
-    darwin.dev.homebrew.casks = [ "wireshark-app" ];
-  };
+  # Network debugging: intercepting proxy and tunnels. Wireshark is not
+  # installed: capturing on darwin needs the ChmodBPF launch daemon that only
+  # the app bundle's installer sets up, so it would have to stay a cask, and
+  # it was not in use. Install it by hand when needed.
+  flake.modules.homeManager.dev =
+    { pkgs, ... }:
+    {
+      home.packages = with pkgs; [
+        cloudflared
+        mitmproxy
+      ];
+    };
 }
