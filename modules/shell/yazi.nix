@@ -1,14 +1,14 @@
 {
   flake.modules.homeManager.shell =
-    { config, pkgs-unstable, ... }:
+    { config, pkgs, ... }:
     let
-      yazi-plugins = pkgs-unstable.fetchFromGitHub {
+      yazi-plugins = pkgs.fetchFromGitHub {
         owner = "yazi-rs";
         repo = "plugins";
         rev = "de53d90cb2740f84ae595f93d0c4c23f8618a9e4";
         hash = "sha256-ixZKOtLOwLHLeSoEkk07TB3N57DXoVEyImR3qzGUzxQ=";
       };
-      yazi-flavors = pkgs-unstable.fetchFromGitHub {
+      yazi-flavors = pkgs.fetchFromGitHub {
         owner = "yazi-rs";
         repo = "flavors";
         rev = "be0b21d0873092a63946cc2678dd700aac945902";
@@ -19,12 +19,12 @@
       programs.yazi = {
         enable = true;
 
-        # nixpkgs-unstable' yazi is a wrapper that already puts every optional dep on
+        # nixpkgs' yazi is a wrapper that already puts every optional dep on
         # yazi's PATH (jq, poppler-utils, 7zz, ffmpeg, fd, ripgrep, fzf,
         # zoxide, imagemagick, chafa, resvg, file); extraPackages adds the
         # ones it doesn't ship.
-        package = pkgs-unstable.yazi.override {
-          extraPackages = with pkgs-unstable; [
+        package = pkgs.yazi.override {
+          extraPackages = with pkgs; [
             exiftool
             mediainfo
           ];
