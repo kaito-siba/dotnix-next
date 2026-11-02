@@ -77,6 +77,16 @@
       flake = false;
     };
 
+    # macOS の launcher。darwin 向けは署名済み bundle の fetchurl で、ソース
+    # ビルドはできない (Xcode が要る)。release tag の commit には flake.nix が
+    # 無いので main の commit で固定し、上げる
+    # ときは upstream の release から 7 日以上空ける。look.cachix の鍵は darwin
+    # では何もビルドしないので追加しない。
+    look = {
+      url = "github:kunkka19xx/look/c52825e59341d5c6c38359f07c8c2728cca9f03a";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
   };
 
   outputs =

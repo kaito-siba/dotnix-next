@@ -14,7 +14,6 @@ in
         homebrew
         desktop
         fonts
-        photography
         tailscale
         activitywatch
 
@@ -39,6 +38,7 @@ in
             hm.video-player
             hm.smoothcsv
             hm.vesktop
+            hm.slack
 
             # Development
             hm.dev

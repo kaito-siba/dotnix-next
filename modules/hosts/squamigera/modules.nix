@@ -11,7 +11,6 @@ in
         homebrew
         desktop
         fonts
-        photography
         tailscale
 
         # Development
@@ -35,6 +34,7 @@ in
             hm.video-player
             hm.smoothcsv
             hm.vesktop
+            hm.slack
 
             # Development
             hm.dev
