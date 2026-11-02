@@ -1,6 +1,10 @@
 {
   flake.modules.homeManager.dev =
-    { pkgs, ... }:
+    {
+      pkgs,
+      hostConfig,
+      ...
+    }:
     {
       home.packages = with pkgs; [
         # nixd rather than nil: it evaluates this flake to complete NixOS /
@@ -11,5 +15,17 @@
         statix
         deadnix
       ];
+
+      # Which configuration nixd should evaluate for option completion: this
+      # host's. The flake path itself comes from NH_FLAKE, the same variable
+      # nh uses, so there is one place that knows where the checkout lives.
+      xdg.configFile."nvim/lua/dotnix/host.lua".text = ''
+        return {
+          name = "${hostConfig.name}",
+          configurations = "${
+            if pkgs.stdenv.hostPlatform.isDarwin then "darwinConfigurations" else "nixosConfigurations"
+          }",
+        }
+      '';
     };
 }
