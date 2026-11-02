@@ -1,0 +1,40 @@
+# Known false positives for vulnix (NVD CPE name matching). Keep this to
+# entries that are wrong for a reason that does not expire; anything that is
+# merely "not fixed yet" belongs in baseline.json instead, so it resurfaces
+# when the version changes.
+#
+# Syntax: https://github.com/nix-community/vulnix#whitelisting
+
+["git"]
+cve = [
+  "CVE-2020-2136", "CVE-2021-21684", "CVE-2022-30947", "CVE-2022-36882",
+  "CVE-2022-36883", "CVE-2022-36884", "CVE-2022-38663",
+]
+comment = "Jenkins Git plugin CVEs matched to git itself by name."
+
+["network"]
+comment = "Haskell `network` library matched against unrelated products named Network."
+
+["vhs"]
+comment = "charmbracelet/vhs; CVE-2021-28381 is a different VHS product."
+
+["codex"]
+comment = "OpenAI codex CLI; CVE-2021-43635 is an unrelated Codex."
+
+["dbus-1"]
+comment = "The dbus config directory derivation, not the daemon; dbus itself is tracked separately."
+
+["polkit-1.pam"]
+comment = "PAM config snippet, not polkit. CVE-2021-4034 (pkexec) was fixed in 0.120."
+
+["lapack-3"]
+comment = "Version parsed as '3' from the lapack-3 symlink derivation."
+
+["dash"]
+comment = "CVE-2024-21485 is the dash (Plotly) Python framework, not the shell."
+
+["lua"]
+comment = "Lua 5.2 is kept for a single consumer; CVE-2021-43519 affects 5.4 only."
+
+["php-calendar"]
+comment = "CVE-2022-4455 is a WordPress calendar plugin."
