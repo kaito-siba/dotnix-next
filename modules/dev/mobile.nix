@@ -2,7 +2,7 @@
   # React Native development: only the always-needed daemons and device
   # tools. JDKs and the Android SDK/emulator stay out of the profile on
   # purpose -- old apps need conflicting versions, so projects pin those
-  # per-repo in a devshell (devenv/devbox are already on PATH).
+  # per-repo in a devshell (templates/react-native is the starting point).
   flake.modules = {
     homeManager.dev =
       { pkgs, lib, ... }:
