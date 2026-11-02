@@ -58,7 +58,6 @@ in
             hm.fievel
 
             # Desktop applications
-            hm.zen-browser
             hm.chromium
             hm.slack
             hm.vesktop
