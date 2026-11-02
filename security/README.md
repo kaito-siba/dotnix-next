@@ -19,22 +19,22 @@
 | `pr-check` | PR ごと | 全ホストが評価できること。flake.lock が動いた PR は変更された input が冷却期間 (7 日) を満たすこと |
 | `daily-security` | 毎日 09:30 JST | vulnix (NVD) + OSV + GitHub advisories。結果は Actions の summary と artifact |
 
-全部ビルドなし。`nix derivation show -r` で derivation を列挙するだけなので darwin ホストも Linux runner で評価できる。
+ホストの評価はビルドなし。`nix derivation show -r` で derivation を列挙するだけなので darwin ホストも Linux runner で評価でき、import-from-derivation は禁止してある (`nix develop .#security` だけは vulnix と cvss の devShell を実体化する)。
 
 ## 日々の運用
 
-- **weekly-update の inputs PR**: 本文の lock 差分と closure 差分を読む。冷却チェックが落ちていたら、日付が過ぎるのを待って `pr-check` を再実行するか、CVE 対応なら `security-fastlane` ラベルを付けて通す。
+- **weekly-update の inputs PR**: 本文の lock 差分 (推移依存も含む) と closure 差分を読む。本文は 60 KB で打ち切られるので、長いときは artifact の完全版を見る。冷却チェックが落ちていたら、日付が過ぎるのを待って `pr-check` を再実行するか、CVE 対応なら `security-fastlane` ラベルを付ける (ラベルの付け外しで pr-check が走り直す)。
 - **daily-security**: 最初の 1 か月は report-only。summary に「New findings」が出たら triage して、
   - 誤検知で恒久的なもの → `vulnix-whitelist.toml`
   - 本物だが今は対応しないもの → `baseline.json` の `keys` に追加 (version が変わると再浮上する)
   - 対応するもの → 手で Issue を立てるか、nixpkgs 側で直っていれば `weekly-update` を `scope=nixpkgs` で手動実行
-- **Issue 化を有効にする**: リポジトリ変数 `SECURITY_ISSUES=true`。baseline に無く、7 日以上残った finding だけが「パッケージ + 検出元」単位で Issue になり、消えたら自動 close する。
+- **Issue 化を有効にする**: リポジトリ変数 `SECURITY_ISSUES=true`。baseline に無く、完全な run で 7 日続けて検出された finding だけが「パッケージ + 検出元」単位で Issue になる。open 済みの Issue はその日に検出されている限り維持され、検出されなくなったら close。途中で検出が途切れると 7 日は数え直し。スキャナが 1 つでも失敗した run は「不完全」として記録だけ残し、Issue の open / close も fastlane の dispatch もしない。
 - **前倒し更新**: `SECURITY_FASTLANE=true` で、vulnix ヒットのパッケージが stable channel HEAD で version が上がっていたら、その日のうちに nixpkgs 更新を dispatch する。
 
 ## 初期設定 (一度だけ)
 
 1. Settings > Actions > General で "Allow GitHub Actions to create and approve pull requests" を on。
-2. 任意: `BOT_TOKEN` secret (PAT か GitHub App token)。無いと bot が作った PR で `pr-check` が走らない (GITHUB_TOKEN の制限)。
+2. 任意: `BOT_TOKEN` secret (PAT か GitHub App token)。GITHUB_TOKEN で作った PR の `pr-check` は人間が run を承認するまで走らないので、無人で回すなら要る。
 3. `baseline.json` は導入時のスキャン結果を手で triage したもの。
 
 ## 手元で動かす
@@ -52,6 +52,7 @@ NVD のフィードは `modified` / `recent` が 2 時間ごと、年次が 1 �
 
 ## 限界
 
+- 冷却期間は lock の `lastModified` (upstream の commit 時刻) を見るだけで、公開からの経過を証明するものではない。公開直後の汚染版を拾わないための遅延であって、lock を書き換えられる相手には効かない。
 - vulnix は名前と version の CPE 照合なので誤検知が多い。whitelist と baseline で吸収する前提。直近 5 年分の NVD しか読まないので、それより古い CVE は見ない。
 - GitHub advisories は「存在する」ことしか見ない。affected range の判定は人間。
 - severity は出所つきで出す (nvd / cvss3 / cvss4 / label / none)。label は CVSS ベクトルが無いときの代表値で、PYSEC 単独のレコードなどは none になる。
