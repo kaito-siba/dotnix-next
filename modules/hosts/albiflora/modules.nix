@@ -44,7 +44,6 @@ in
             hm.claude-code
             hm.ai
             hm.llama
-            hm.rbw
 
             # hm.calendar is deliberately absent: modules/calendar/secrets is
             # encrypted for radiata and the mac only, so the user-level
@@ -64,9 +63,7 @@ in
             hm.zen-browser
             hm.chromium
             hm.slack
-            hm.mail
             hm.vesktop
-            hm.vscode
             hm.obs
             hm.gif
             hm.trcc

@@ -37,13 +37,11 @@ in
             # Desktop applications
             hm.appcleaner
             hm.video-player
-            hm.mail
             hm.smoothcsv
             hm.vesktop
 
             # Development
             hm.dev
-            hm.vscode
             hm.ai
 
             # Time tracking

@@ -14,10 +14,8 @@
 
         # utils
         yq-go
-        visidata
         ffmpeg
         fastfetch
-        with-shell
         lnav
       ];
     };

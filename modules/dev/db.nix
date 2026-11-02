@@ -9,14 +9,10 @@
           [
             postgresql
             mysql84
-            lazysql
           ]
           # mysql-shell comes from homebrew on darwin -- see the other half below.
           ++ lib.optionals stdenv.hostPlatform.isLinux [ mysql-shell ];
 
-        programs.zsh.shellAliases = {
-          lq = "lazysql";
-        };
       };
 
     # nixpkgs' mysql-shell has no aarch64-darwin binary cache because it does

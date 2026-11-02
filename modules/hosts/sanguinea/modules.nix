@@ -45,7 +45,6 @@ in
             hm.obsidian
             hm.claude-code
             hm.ai
-            hm.rbw
 
             # hm.calendar is deliberately absent: modules/calendar/secrets is
             # not encrypted for this host's w963n age key yet, so the
@@ -64,9 +63,7 @@ in
             hm.zen-browser
             hm.chromium
             hm.slack
-            hm.mail
             hm.vesktop
-            hm.vscode
             hm.onlyoffice
             hm.smoothcsv
             hm.video-player
