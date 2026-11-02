@@ -28,10 +28,23 @@ jobs:
   nixpkgs:
     if: ${{ github.event_name == 'schedule' || inputs.scope == 'all' || inputs.scope == 'nixpkgs' }}
     runs-on: ubuntu-latest
+    env:
+      HAS_BOT_APP: ${{ secrets.BOT_APP_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # PRs are made as the bot App when its credentials are present, so that
+      # pr-check runs on them without a human approving the run (GITHUB_TOKEN
+      # cannot trigger workflows). Without the App everything still works,
+      # except that the bot PR waits for that approval.
+      - name: bot token
+        id: bot
+        if: env.HAS_BOT_APP == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
         with:
           extra_nix_config: |
@@ -68,9 +81,7 @@ jobs:
         id: pr
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
-          # A PAT/App token lets the PR trigger pr-check.yml without approval;
-          # GITHUB_TOKEN-made PRs wait for a human to approve the run.
-          token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ steps.bot.outputs.token || github.token }}
           branch: update/nixpkgs
           delete-branch: true
           commit-message: "chore(deps): nixpkgs を更新"
@@ -80,12 +91,11 @@ jobs:
       - name: merge once pr-check passes
         # master is protected: the PR merges by itself (--auto) when the
         # required checks (pr-check's eval and cooling) pass, and only for the
-        # commit evaluated here (--match-head-commit). pr-check on a bot PR
-        # needs BOT_TOKEN; with GITHUB_TOKEN the run waits for approval and
-        # this step times out instead of merging.
+        # commit evaluated here (--match-head-commit). Without the bot App the
+        # pr-check run waits for approval and this step times out instead.
         if: steps.pr.outputs.pull-request-number != ''
         env:
-          GH_TOKEN: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
           PR: ${{ steps.pr.outputs.pull-request-number }}
         run: |
           gh pr merge "$PR" --squash --auto --match-head-commit "${{ steps.pr.outputs.pull-request-head-sha }}"
@@ -111,11 +121,24 @@ jobs:
         (github.event_name == 'schedule' || inputs.scope == 'all' || inputs.scope == 'inputs')
       }}
     runs-on: ubuntu-latest
+    env:
+      HAS_BOT_APP: ${{ secrets.BOT_APP_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+      # PRs are made as the bot App when its credentials are present, so that
+      # pr-check runs on them without a human approving the run (GITHUB_TOKEN
+      # cannot trigger workflows). Without the App everything still works,
+      # except that the bot PR waits for that approval.
+      - name: bot token
+        id: bot
+        if: env.HAS_BOT_APP == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
         with:
           extra_nix_config: |
@@ -157,7 +180,7 @@ jobs:
         if: steps.update.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
-          token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ steps.bot.outputs.token || github.token }}
           branch: update/inputs
           delete-branch: true
           commit-message: "chore(deps): flake input を更新"
