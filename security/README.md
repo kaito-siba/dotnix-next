@@ -15,7 +15,7 @@
 
 | workflow | いつ | 何をするか |
 |---|---|---|
-| `weekly-update` | 土曜 09:00 JST | `nix flake update`。nixpkgs だけの PR は全ホストの評価が通れば自動 merge。それ以外の input の PR は人間が読んで merge |
+| `weekly-update` | 土曜 09:00 JST | `nix flake update`。nixpkgs だけの PR は pr-check が通れば自動 merge (`--auto`)。それ以外の input の PR は人間が読んで merge |
 | `pr-check` | PR ごと | 全ホストが評価できること。flake.lock が動いた PR は変更された input が冷却期間 (7 日) を満たすこと |
 | `daily-security` | 毎日 09:30 JST | vulnix (NVD) + OSV + GitHub advisories。結果は Actions の summary と artifact |
 
@@ -34,8 +34,9 @@
 ## 初期設定 (一度だけ)
 
 1. Settings > Actions > General で "Allow GitHub Actions to create and approve pull requests" を on。
-2. 任意: `BOT_TOKEN` secret (PAT か GitHub App token)。GITHUB_TOKEN で作った PR の `pr-check` は人間が run を承認するまで走らないので、無人で回すなら要る。
-3. `baseline.json` は導入時のスキャン結果を手で triage したもの。
+2. `BOT_TOKEN` secret (fine-grained PAT)。GITHUB_TOKEN で作った PR の `pr-check` は人間が run を承認するまで走らず、master は pr-check 必須なので、無いと weekly-update の自動 merge が進まない。このリポジトリだけに絞って Contents: write、Pull requests: write、Workflows: read を付ける。有効期限が切れると weekly-update が静かに止まるので、期限は Issue か calendar に控える。
+3. master の ruleset (設定済み): PR 必須 (承認 0)、`eval` と `cooling` の status check 必須、force push と削除禁止、bypass なし。緊急で直接 push したいときは ruleset を一時的に disabled にする。
+4. `baseline.json` は導入時のスキャン結果を手で triage したもの。
 
 ## 手元で動かす
 

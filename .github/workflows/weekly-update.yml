@@ -77,21 +77,32 @@ jobs:
           title: "chore(deps): nixpkgs を更新"
           body-path: /tmp/body.md
           labels: deps,nixpkgs
-      - name: merge
-        # The evaluation above is the gate. --match-head-commit refuses to
-        # merge anything but the commit that was evaluated. With branch
-        # protection this would have to become --auto; there is none today.
+      - name: merge once pr-check passes
+        # master is protected: the PR merges by itself (--auto) when the
+        # required checks (pr-check's eval and cooling) pass, and only for the
+        # commit evaluated here (--match-head-commit). pr-check on a bot PR
+        # needs BOT_TOKEN; with GITHUB_TOKEN the run waits for approval and
+        # this step times out instead of merging.
         if: steps.pr.outputs.pull-request-number != ''
         env:
           GH_TOKEN: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
-        run: >-
-          gh pr merge "${{ steps.pr.outputs.pull-request-number }}"
-          --squash --delete-branch
-          --match-head-commit "${{ steps.pr.outputs.pull-request-head-sha }}"
+          PR: ${{ steps.pr.outputs.pull-request-number }}
+        run: |
+          gh pr merge "$PR" --squash --auto --match-head-commit "${{ steps.pr.outputs.pull-request-head-sha }}"
+          timeout 30m gh pr checks "$PR" --watch --fail-level error
+          for i in $(seq 1 30); do
+            state=$(gh pr view "$PR" --json state --jq .state)
+            [ "$state" = "MERGED" ] && break
+            sleep 10
+          done
+          echo "PR #$PR: $state"
+          [ "$state" = "MERGED" ]
 
   inputs:
     # Runs after the nixpkgs job whether that one ran or was skipped
-    # (scope=inputs); a plain `needs` would propagate the skip.
+    # (scope=inputs); a plain `needs` would propagate the skip. Waiting for it
+    # means this job starts from a default branch that already has the new
+    # nixpkgs, so the two PRs do not fight over flake.lock.
     needs: [nixpkgs]
     if: >-
       ${{
