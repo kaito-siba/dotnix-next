@@ -30,7 +30,7 @@
 
     claude-code = {
       url = "github:sadjow/claude-code-nix?ref=latest";
-      inputs.nixpkgs.follows = "nixpkgs-unstable";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     sops-nix = {
@@ -40,7 +40,7 @@
 
     herdr = {
       url = "github:ogulcancelik/herdr";
-      inputs.nixpkgs.follows = "nixpkgs-unstable";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # v5 (C++ native rewrite). Deliberately does NOT follow our nixpkgs:
@@ -50,17 +50,17 @@
 
     xremap = {
       url = "github:xremap/nix-flake";
-      inputs.nixpkgs.follows = "nixpkgs-unstable";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     zen-browser = {
       url = "github:0xc000022070/zen-browser-flake";
-      inputs.nixpkgs.follows = "nixpkgs-unstable";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     sqlit = {
       url = "github:Maxteabag/sqlit";
-      inputs.nixpkgs.follows = "nixpkgs-unstable";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # Thermalright の LCD/LED コントロールセンター。リリースタグ v9.9.5 より後に

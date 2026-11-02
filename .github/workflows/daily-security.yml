@@ -1,0 +1,73 @@
+# Daily: vulnix (NVD) + OSV + GitHub advisories over every host's closure.
+# Report-only by default; set the repository variable SECURITY_ISSUES=true to
+# turn persistent new findings into Issues, and SECURITY_FASTLANE=true to let
+# the scan dispatch the nixpkgs update when the channel is already ahead.
+name: daily-security
+
+on:
+  schedule:
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+    inputs:
+      issues:
+        description: open/close Issues for persistent findings
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+concurrency:
+  group: daily-security
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          extra_nix_config: |
+            accept-flake-config = false
+      # No NVD cache on purpose. With a day-old cache vulnix fetches only the
+      # "modified" feed, which NVD regenerates every two hours and which 404s
+      # around each regeneration. An empty cache makes it fetch the yearly
+      # feeds instead (~400 MB, about a minute), and those are regenerated
+      # once a day at 08:00 UTC, far from this job's 00:30 UTC.
+      - name: closure of every host
+        run: python3 security/scripts/closure.py /tmp/closure.json
+      - name: earlier results (persistence rule)
+        # One directory per run, nothing flattened: scan.py picks the latest
+        # result per date by its generated_at. A download that fails just
+        # leaves a gap, which the persistence rule treats as "not observed".
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/history
+          since=$(date -u -d '-21 days' +%F)
+          for id in $(gh run list --workflow daily-security.yml --branch "${{ github.event.repository.default_branch }}" --status success --created ">=$since" --limit 40 --json databaseId --jq '.[].databaseId'); do
+            gh run download "$id" -n scan-results -D "/tmp/history/$id" || echo "no results for run $id"
+          done
+          find /tmp/history -name '*.json' | sort
+      - name: scan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=""
+          if [ "${{ vars.SECURITY_ISSUES }}" = "true" ] || [ "${{ inputs.issues }}" = "true" ]; then flags="$flags --issues"; fi
+          if [ "${{ vars.SECURITY_FASTLANE }}" = "true" ]; then flags="$flags --fastlane"; fi
+          nix develop .#security -c \
+            python3 security/scripts/scan.py --closure /tmp/closure.json --lock flake.lock \
+              --out "results/$(date -u +%F).json" --history /tmp/history --summary /tmp/summary.md $flags
+          cat /tmp/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: scan-results
+          path: results/
+          retention-days: 90

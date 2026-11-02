@@ -1,0 +1,29 @@
+# Knobs for security/scripts/*.py. Each scanner can be switched off on its
+# own if it turns out to be more noise than signal.
+
+persist_days = 7   # a new finding must be seen on every complete run this long before it becomes an Issue
+cooling_days = 7   # flake inputs must point at commits at least this old (cooling.py; env COOLING_DAYS overrides)
+
+[scanners]
+vulnix = true
+osv = true
+ghsa = true
+
+[fastlane]
+# When a vulnix hit's package already has a newer version on the stable
+# channel HEAD, the daily scan dispatches the nixpkgs-only update instead of
+# waiting for Saturday.
+enabled = true
+
+# Packages that are not visible as PyPI / crates.io derivations but should be
+# looked up in OSV by their upstream registry name. `pname` is the derivation
+# pname whose version to use.
+[[osv.extra]]
+ecosystem = "npm"
+name = "@anthropic-ai/claude-code"
+pname = "claude-code"
+
+[[osv.extra]]
+ecosystem = "npm"
+name = "@openai/codex"
+pname = "codex"

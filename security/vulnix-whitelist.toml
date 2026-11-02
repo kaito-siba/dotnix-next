@@ -1,0 +1,47 @@
+# Known false positives for vulnix (NVD CPE name matching). Keep this to
+# entries that are wrong for a reason that does not expire, and list the CVEs
+# wherever the reason is "that CVE is about something else": a bare package
+# section hides every future CVE of that package too. Anything that is merely
+# "not fixed yet" belongs in baseline.json instead, so it resurfaces when the
+# version changes.
+#
+# Syntax: https://github.com/nix-community/vulnix#whitelisting
+
+["git"]
+cve = [
+  "CVE-2020-2136", "CVE-2021-21684", "CVE-2022-30947", "CVE-2022-36882",
+  "CVE-2022-36883", "CVE-2022-36884", "CVE-2022-38663",
+]
+comment = "Jenkins Git plugin CVEs matched to git itself by name."
+
+["network"]
+comment = "Haskell `network` library matched against unrelated products named Network."
+
+["vhs"]
+cve = ["CVE-2021-28381"]
+comment = "charmbracelet/vhs; this CVE is a different VHS product."
+
+["codex"]
+cve = ["CVE-2021-43635"]
+comment = "OpenAI codex CLI; this CVE is an unrelated Codex."
+
+["dbus-1"]
+comment = "The dbus config directory derivation, not the daemon; dbus itself is tracked separately."
+
+["polkit-1.pam"]
+comment = "PAM config snippet, not polkit. CVE-2021-4034 (pkexec) was fixed in 0.120."
+
+["lapack-3"]
+comment = "Version parsed as '3' from the lapack-3 symlink derivation."
+
+["dash"]
+cve = ["CVE-2024-21485"]
+comment = "The dash (Plotly) Python framework, not the shell."
+
+["lua"]
+cve = ["CVE-2021-43519"]
+comment = "Affects 5.4 only; the 5.2 here is kept for a single consumer."
+
+["php-calendar"]
+cve = ["CVE-2022-4455"]
+comment = "A WordPress calendar plugin."

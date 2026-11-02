@@ -1,0 +1,189 @@
+# Saturday 09:00 JST: bump flake inputs and open PRs with a closure diff.
+#
+# Two PRs, not one. nixpkgs (stable) is reviewed upstream and merges by itself
+# once every host still evaluates; the other inputs wait for a human and for
+# the cooling period (pr-check.yml). See security/README.md.
+name: weekly-update
+
+on:
+  schedule:
+    - cron: "0 0 * * 6"
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: which inputs to update
+        type: choice
+        options: [all, nixpkgs, inputs]
+        default: all
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: weekly-update
+  cancel-in-progress: false
+
+jobs:
+  nixpkgs:
+    if: ${{ github.event_name == 'schedule' || inputs.scope == 'all' || inputs.scope == 'nixpkgs' }}
+    runs-on: ubuntu-latest
+    env:
+      HAS_BOT_APP: ${{ secrets.BOT_APP_PRIVATE_KEY != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # PRs are made as the bot App when its credentials are present, so that
+      # pr-check runs on them without a human approving the run (GITHUB_TOKEN
+      # cannot trigger workflows). Without the App everything still works,
+      # except that the bot PR waits for that approval.
+      - name: bot token
+        id: bot
+        if: env.HAS_BOT_APP == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          extra_nix_config: |
+            accept-flake-config = false
+      - name: closure before
+        run: |
+          cp flake.lock /tmp/before.lock
+          python3 security/scripts/closure.py /tmp/before.json
+      - name: update nixpkgs
+        id: update
+        run: |
+          nix flake update nixpkgs
+          if git diff --quiet flake.lock; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+      - name: closure after (every host must still evaluate)
+        if: steps.update.outputs.changed == 'true'
+        run: python3 security/scripts/closure.py /tmp/after.json
+      - name: report
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          python3 security/scripts/report.py /tmp/before.lock flake.lock /tmp/before.json /tmp/after.json > /tmp/report-full.md
+          {
+            echo "nixpkgs (stable) を更新。全ホストの評価が通ったので自動 merge される。完全なレポートは workflow の artifact。"
+            echo
+            python3 security/scripts/report.py /tmp/before.lock flake.lock /tmp/before.json /tmp/after.json --max-bytes 60000
+          } > /tmp/body.md
+          cat /tmp/report-full.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.update.outputs.changed == 'true'
+        with:
+          name: report-nixpkgs
+          path: /tmp/report-full.md
+      - name: pull request
+        if: steps.update.outputs.changed == 'true'
+        id: pr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.bot.outputs.token || github.token }}
+          branch: update/nixpkgs
+          delete-branch: true
+          commit-message: "chore(deps): nixpkgs を更新"
+          title: "chore(deps): nixpkgs を更新"
+          body-path: /tmp/body.md
+          labels: deps,nixpkgs
+      - name: merge once pr-check passes
+        # master is protected: the PR merges by itself (--auto) when the
+        # required checks (pr-check's eval and cooling) pass, and only for the
+        # commit evaluated here (--match-head-commit). Without the bot App the
+        # pr-check run waits for approval and this step times out instead.
+        if: steps.pr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
+          PR: ${{ steps.pr.outputs.pull-request-number }}
+        run: |
+          gh pr merge "$PR" --squash --auto --match-head-commit "${{ steps.pr.outputs.pull-request-head-sha }}"
+          timeout 30m gh pr checks "$PR" --watch --fail-level error
+          for i in $(seq 1 30); do
+            state=$(gh pr view "$PR" --json state --jq .state)
+            [ "$state" = "MERGED" ] && break
+            sleep 10
+          done
+          echo "PR #$PR: $state"
+          [ "$state" = "MERGED" ]
+
+  inputs:
+    # Runs after the nixpkgs job whether that one ran or was skipped
+    # (scope=inputs); a plain `needs` would propagate the skip. Waiting for it
+    # means this job starts from a default branch that already has the new
+    # nixpkgs, so the two PRs do not fight over flake.lock.
+    needs: [nixpkgs]
+    if: >-
+      ${{
+        !cancelled() &&
+        (needs.nixpkgs.result == 'success' || needs.nixpkgs.result == 'skipped') &&
+        (github.event_name == 'schedule' || inputs.scope == 'all' || inputs.scope == 'inputs')
+      }}
+    runs-on: ubuntu-latest
+    env:
+      HAS_BOT_APP: ${{ secrets.BOT_APP_PRIVATE_KEY != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      # PRs are made as the bot App when its credentials are present, so that
+      # pr-check runs on them without a human approving the run (GITHUB_TOKEN
+      # cannot trigger workflows). Without the App everything still works,
+      # except that the bot PR waits for that approval.
+      - name: bot token
+        id: bot
+        if: env.HAS_BOT_APP == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          extra_nix_config: |
+            accept-flake-config = false
+      - name: closure before
+        run: |
+          cp flake.lock /tmp/before.lock
+          python3 security/scripts/closure.py /tmp/before.json
+      - name: update every input except nixpkgs
+        id: update
+        run: |
+          inputs=$(python3 -c 'import json; l=json.load(open("flake.lock")); print(" ".join(n for n,v in l["nodes"][l["root"]]["inputs"].items() if n != "nixpkgs" and not isinstance(v, list)))')
+          nix flake update $inputs
+          if git diff --quiet flake.lock; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+      - name: closure after (every host must still evaluate)
+        if: steps.update.outputs.changed == 'true'
+        run: python3 security/scripts/closure.py /tmp/after.json
+      - name: report
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          python3 security/scripts/report.py /tmp/before.lock flake.lock /tmp/before.json /tmp/after.json > /tmp/report-full.md
+          {
+            echo "nixpkgs 以外の input を更新。冷却期間 (7 日) を満たすまで pr-check が落ちる。"
+            echo "緊急時は \`security-fastlane\` ラベルでチェックを飛ばす。完全なレポートは workflow の artifact。"
+            echo
+            echo "## cooling"
+            echo
+            python3 security/scripts/cooling.py flake.lock /tmp/before.lock || true
+            echo
+            python3 security/scripts/report.py /tmp/before.lock flake.lock /tmp/before.json /tmp/after.json --max-bytes 60000
+          } > /tmp/body.md
+          cat /tmp/report-full.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.update.outputs.changed == 'true'
+        with:
+          name: report-inputs
+          path: /tmp/report-full.md
+      - name: pull request
+        if: steps.update.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.bot.outputs.token || github.token }}
+          branch: update/inputs
+          delete-branch: true
+          commit-message: "chore(deps): flake input を更新"
+          title: "chore(deps): flake input を更新"
+          body-path: /tmp/body.md
+          labels: deps,inputs
