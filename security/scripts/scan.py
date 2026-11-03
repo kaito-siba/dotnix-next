@@ -12,13 +12,17 @@ Three sources, each switchable in security/config.toml:
           flake takes code from. Reported as-is, without version matching:
           small projects write affected ranges too loosely to trust a parser.
 
-Findings are keyed per package+version+source (not per CVE: the fix is a
-version bump either way). security/baseline.json holds the keys triaged by
-hand when the scan was introduced; only keys outside it count as new.
+Findings are keyed per package+version+source (the fix is a version bump
+either way), but whether something is new is judged per advisory id: a CVE
+published later for an already-known version must not hide behind the
+package key. security/baseline.json holds the id keys (see id_keys) from when
+the scan was introduced; a finding is new if any of its ids is outside it, and
+it then carries only those ids.
 
-Issues (--issues): a new finding is *opened* once it has been seen on every
-complete run for persist_days (judged from --history); an open issue is
-*kept* as long as its key is found at all today, and *closed* when it is not.
+Issues (--issues): one per finding key. It is *opened* once one of its new ids
+has been seen on every complete run for persist_days (judged from --history),
+and gets a comment when more ids turn up later; an open issue is *kept* as
+long as its key has any new id today, and *closed* when it has none.
 A run in which any scanner failed is incomplete: it is reported, saved with
 complete=false, and neither opens nor closes anything, because "could not
 look" must never read as "gone".
@@ -86,6 +90,14 @@ def finding(source, pname, version, ids, severity, how, hosts, detail=""):
         "hosts": sorted(set(hosts)),
         "detail": detail,
     }
+
+
+def id_keys(f):
+    """{id key: id} for a finding. A ghsa finding is already one advisory (its
+    ids are the GHSA and its CVE alias), so its key is the only id key."""
+    if f["source"] == "ghsa":
+        return {f["key"]: f["ids"][0] if f["ids"] else f["key"]}
+    return {f"{f['key']}:{i}": i for i in f["ids"]}
 
 
 def merge_findings(findings):
@@ -387,6 +399,18 @@ def sync_issues(create, keep, dry_run):
         sh("gh", "label", "create", label, "--color", "B60205", "--description", "automated security scan", "--force", check=False)
     for key, f in create.items():
         if key in by_key:
+            m = re.search(r"^\*\*ids\*\*: (.*)$", by_key[key].get("body") or "", re.M)
+            known = set(m.group(1).split(", ")) if m else set()
+            added = [i for i in f["ids"] if i not in known]
+            # The body's ids line is what is compared, so update it too or
+            # every later run comments again.
+            if added:
+                print(f"issue: #{by_key[key]['number']} new ids {', '.join(added)}")
+                if not dry_run:
+                    body = re.sub(r"^\*\*ids\*\*: .*$", f"**ids**: {', '.join(sorted(known | set(added)))}",
+                                  by_key[key]["body"], count=1, flags=re.M)
+                    sh("gh", "issue", "edit", str(by_key[key]["number"]), "--body", body)
+                    sh("gh", "issue", "comment", str(by_key[key]["number"]), "--body", f"New ids detected: {', '.join(added)}")
             continue
         title = f"[security] {f['pname']} {f['version']} ({f['source']})".strip()
         body = "\n".join([
@@ -400,7 +424,7 @@ def sync_issues(create, keep, dry_run):
             f["detail"],
             "",
             "Opened by the daily security scan after the finding persisted. It closes on its own once "
-            "the finding disappears (version bump) or the key is added to security/baseline.json or the "
+            "the finding disappears (version bump) or its ids are added to security/baseline.json or the "
             "vulnix whitelist.",
         ])
         print(f"issue: create {title}")
@@ -425,7 +449,7 @@ def summarize(findings, new, persistent, fastlane, stats, cfg, complete):
         lines.append("")
     lines.append(f"derivations: {stats['drvs']}, vulnix hits: {stats['vulnix']}, osv queries: {stats['osv_q']} (hits {stats['osv']}), "
                  f"ghsa repos: {stats['ghsa_repos']} (advisories {stats['ghsa']})")
-    lines.append(f"baseline: {stats['baseline']} keys, new (not in baseline): {len(new)}, "
+    lines.append(f"baseline: {stats['baseline']} ids, new (packages with ids not in baseline): {len(new)}, "
                  f"persistent >= {cfg['persist_days']}d: {len(persistent)}, history days: {stats['history']}")
     lines.append("")
     lines.append("severity: nvd = NVD の CVSS v3、cvss3 / cvss4 = OSV のベクトルから計算、label = CRITICAL/HIGH/MODERATE/LOW の語からの代表値 (fallback)、none = 情報なし")
@@ -494,13 +518,19 @@ def main():
     baseline_path = ROOT / "baseline.json"
     baseline = set(json.load(open(baseline_path))["keys"]) if baseline_path.exists() else set()
     stats["baseline"] = len(baseline)
-    new = [f for f in findings if f["key"] not in baseline]
+    new, new_ids = [], {}
+    for f in findings:
+        unknown = {k: i for k, i in id_keys(f).items() if k not in baseline}
+        if unknown:
+            new.append(dict(f, ids=sorted(set(unknown.values()))))
+            new_ids[f["key"]] = unknown
 
     today = dt.date.today()
     history = load_history(args.history) if args.history else {}
     stats["history"] = len(history)
-    persistent_set = persistent_keys({f["key"] for f in new}, history, today, cfg["persist_days"]) if complete else set()
-    persistent = [f for f in new if f["key"] in persistent_set]
+    all_new = {k for u in new_ids.values() for k in u}
+    persistent_set = persistent_keys(all_new, history, today, cfg["persist_days"]) if complete else set()
+    persistent = [f for f in new if persistent_set & new_ids[f["key"]].keys()]
 
     fastlane = []
     vulnix_pnames = sorted({f["pname"] for f in findings if f["source"] == "vulnix"})
@@ -512,9 +542,9 @@ def main():
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "complete": complete,
         "errors": stats["errors"],
-        "keys": sorted(f["key"] for f in findings),
+        "keys": sorted(k for f in findings for k in id_keys(f)),
         "findings": findings,
-        "new": sorted(f["key"] for f in new),
+        "new": sorted(all_new),
         "persistent": sorted(persistent_set),
         "fastlane": fastlane,
     }
