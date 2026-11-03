@@ -23,6 +23,12 @@ concurrency:
   group: daily-security
   cancel-in-progress: true
 
+# `shell: bash` runs steps with -eo pipefail; the implicit default is bash -e
+# only, under which `cmd | tee` reports tee's status and hides cmd failing.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   scan:
     runs-on: ubuntu-latest
