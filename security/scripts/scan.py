@@ -532,6 +532,7 @@ def main():
     complete = not stats["errors"]
 
     baseline_path = ROOT / "baseline.json"
+    # keys is {id key: why it is accepted}; only the keys matter here.
     baseline = set(json.load(open(baseline_path))["keys"]) if baseline_path.exists() else set()
     stats["baseline"] = len(baseline)
     new, new_ids = [], {}

@@ -45,3 +45,220 @@ comment = "Affects 5.4 only; the 5.2 here is kept for a single consumer."
 ["php-calendar"]
 cve = ["CVE-2022-4455"]
 comment = "A WordPress calendar plugin."
+
+# --- 2026-11-03 baseline triage: CVEs about a different product of the same
+# name. Listed per CVE so a real CVE of the package still shows up. Where the
+# package itself is a different product (a Haskell or Rust library named after
+# a C one), the section is pinned to that version instead.
+
+["ada"]
+cve = ["CVE-2024-9410"]
+comment = "Ada.cx Sentry component; ada here is the C++ URL parser."
+
+["async"]
+cve = ["CVE-2021-43138"]
+comment = "The JavaScript async library; this is the Haskell async package."
+
+["cargo"]
+cve = [
+  "CVE-2026-14363", "CVE-2026-39837", "CVE-2026-39839", "CVE-2026-39840",
+  "CVE-2026-39841", "CVE-2026-58519", "CVE-2026-58521",
+]
+comment = "The MediaWiki Cargo extension, not Rust's cargo."
+
+["commonmark"]
+cve = ["CVE-2026-30838", "CVE-2026-86430"]
+comment = "league/commonmark (PHP); this is the Haskell commonmark package."
+
+["crossbeam"]
+cve = ["CVE-2022-23639"]
+comment = "About crossbeam-utils < 0.8.7, a separate crate from the crossbeam umbrella crate."
+
+["dbus-0.9.10"]
+comment = "The Rust dbus crate; the D-Bus daemon CVEs matched by name."
+
+["Diff"]
+cve = ["CVE-2024-13278", "CVE-2026-73478"]
+comment = "The Drupal Diff module; this is the Haskell Diff package."
+
+["diff"]
+cve = ["CVE-2024-13278", "CVE-2026-73478"]
+comment = "The Drupal Diff module; this is the Rust diff crate."
+
+["filelock"]
+cve = ["CVE-2025-68146", "CVE-2026-112909", "CVE-2026-22701"]
+comment = "The Python filelock package; this is the Haskell filelock package (0.1.x)."
+
+["gcc"]
+cve = ["CVE-2021-37322"]
+comment = "c++filt from binutils, not GCC."
+
+["go"]
+cve = ["CVE-2023-49292"]
+comment = "ecies/go, a Go library, not the Go toolchain."
+
+["hedgehog"]
+cve = ["CVE-2021-4276"]
+comment = "dns-stats hedgehog; this is the Haskell hedgehog testing library."
+
+["jam"]
+cve = ["CVE-2025-3841"]
+comment = "wix-incubator/jam; this is Perforce Jam."
+
+["libmpeg2"]
+cve = ["CVE-2022-37416"]
+comment = "Ittiam libmpeg2 (Android); this is the VideoLAN libmpeg2."
+
+["malcontent"]
+cve = ["CVE-2026-24845", "CVE-2026-28407"]
+comment = "chainguard-dev/malcontent (supply-chain scanner); this is the freedesktop parental controls malcontent."
+
+["memcached"]
+cve = ["CVE-2022-26635"]
+comment = "The PHP-Memcached extension, not the memcached server."
+
+["mercurial"]
+cve = ["CVE-2022-43410"]
+comment = "The Jenkins Mercurial plugin."
+
+["ninja"]
+cve = ["CVE-2021-4336"]
+comment = "ITRS monitor-ninja, not the ninja build tool."
+
+["nix"]
+cve = ["CVE-2024-27297"]
+comment = "Nix the package manager (fixed in 2.20+); the nix here is the Rust nix crate."
+
+["Obsidian"]
+cve = ["CVE-2023-24044"]
+comment = "Plesk Obsidian, not the Obsidian note app."
+
+["obsidian"]
+cve = ["CVE-2023-24044"]
+comment = "Plesk Obsidian, not the Obsidian note app."
+
+["openmp"]
+cve = ["CVE-2022-26345"]
+comment = "Intel oneAPI OpenMP; this is LLVM's openmp."
+
+["orc"]
+cve = ["CVE-2025-47436"]
+comment = "Apache ORC (file format); this is the GStreamer Oil Runtime Compiler."
+
+["python"]
+cve = ["CVE-2024-49050", "CVE-2025-49714"]
+comment = "The Python extension for Visual Studio Code, not CPython."
+
+["rubygems"]
+cve = ["CVE-2022-36073"]
+comment = "The rubygems.org web service, not the rubygems client."
+
+["safe"]
+cve = [
+  "CVE-2021-33594", "CVE-2021-33595", "CVE-2021-33596", "CVE-2021-40834",
+  "CVE-2021-40835", "CVE-2021-44751", "CVE-2022-28868", "CVE-2022-28869",
+  "CVE-2022-28870", "CVE-2022-28872", "CVE-2022-28873", "CVE-2022-38163",
+  "CVE-2022-38164", "CVE-2022-47524",
+]
+comment = "F-Secure SAFE Browser; this is the Haskell safe package."
+
+["semver"]
+cve = ["CVE-2022-25883"]
+comment = "The npm semver package; this is the Rust semver crate."
+
+["ShellCheck"]
+cve = ["CVE-2021-28794"]
+comment = "An unofficial VS Code ShellCheck extension, not ShellCheck."
+
+["shellcheck"]
+cve = ["CVE-2021-28794"]
+comment = "An unofficial VS Code ShellCheck extension, not ShellCheck."
+
+["snappy"]
+cve = ["CVE-2023-28115", "CVE-2023-41330"]
+comment = "KnpLabs snappy (PHP); this is Google's snappy compression library."
+
+["stringbuilder"]
+cve = ["CVE-2024-21524"]
+comment = "The npm node-stringbuilder package."
+
+["subversion"]
+cve = ["CVE-2021-21698", "CVE-2022-29046", "CVE-2022-29048"]
+comment = "The Jenkins Subversion plugin."
+
+["swift"]
+cve = ["CVE-2023-26154"]
+comment = "PubNub SDKs, not the Swift toolchain."
+
+["tap"]
+cve = ["CVE-2023-41940"]
+comment = "The Jenkins TAP plugin."
+
+["thrift"]
+cve = ["CVE-2021-24028"]
+comment = "Facebook fbthrift, not Apache Thrift."
+
+["tokio"]
+cve = ["CVE-2024-27308"]
+comment = "About mio's Windows named pipes, a separate crate and platform."
+
+["uuid"]
+cve = ["CVE-2026-41907", "CVE-2026-41988"]
+comment = "The npm uuid package; this is the Rust uuid crate."
+
+["vault"]
+cve = [
+  "CVE-2021-27400", "CVE-2021-3024", "CVE-2021-38554", "CVE-2021-41802",
+  "CVE-2022-41316", "CVE-2023-0620", "CVE-2023-0665", "CVE-2023-2121",
+  "CVE-2023-24999", "CVE-2023-25000", "CVE-2023-6337", "CVE-2024-2048",
+  "CVE-2024-8365", "CVE-2025-4166", "CVE-2025-6011", "CVE-2025-6014",
+  "CVE-2025-6037", "CVE-2026-5807",
+]
+comment = "HashiCorp Vault; this is the Haskell vault package."
+
+["warp"]
+cve = [
+  "CVE-2022-2145", "CVE-2022-2225", "CVE-2022-3320", "CVE-2022-3512",
+  "CVE-2022-4428", "CVE-2022-4457", "CVE-2023-0238", "CVE-2023-0652",
+  "CVE-2023-0654", "CVE-2023-1412", "CVE-2023-1862", "CVE-2023-2754",
+  "CVE-2025-0651",
+]
+comment = "The Cloudflare WARP client; this is the Haskell warp web server."
+
+["word-wrap"]
+cve = ["CVE-2023-26115"]
+comment = "The npm word-wrap package; this is the Haskell word-wrap package."
+
+["xunit"]
+cve = ["CVE-2022-34181"]
+comment = "The Jenkins xUnit plugin, not xUnit.net."
+
+["yaml"]
+cve = ["CVE-2021-4235", "CVE-2022-3064"]
+comment = "go-yaml; this is the Haskell yaml package."
+
+["yoke"]
+cve = ["CVE-2026-26055", "CVE-2026-26056"]
+comment = "yokecd/yoke (IaC deployer); this is the Rust yoke crate."
+
+["zlib"]
+cve = ["CVE-2023-6992", "CVE-2026-27820"]
+comment = "Cloudflare's zlib fork and Ruby's zlib binding, not zlib."
+
+["zlib-0.7.1.1"]
+comment = "The Haskell zlib binding; C zlib CVEs matched by name."
+
+["curl-0.4.49"]
+comment = "The Rust curl crate (bindings); C curl CVEs matched by name."
+
+["protobuf"]
+cve = ["CVE-2026-0994"]
+comment = "Python protobuf's json_format; this derivation is the C++ library."
+
+["avahi"]
+cve = ["CVE-2021-26720"]
+comment = "A Debian packaging script (avahi-daemon-check-dns.sh), not upstream avahi."
+
+["accountsservice"]
+cve = ["CVE-2023-3297"]
+comment = "An Ubuntu-specific patch to accountsservice."
