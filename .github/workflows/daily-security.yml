@@ -6,7 +6,7 @@ name: daily-security
 
 on:
   schedule:
-    - cron: "30 0 * * *"
+    - cron: "17 22 * * *"
   workflow_dispatch:
     inputs:
       issues:
@@ -38,7 +38,7 @@ jobs:
       # "modified" feed, which NVD regenerates every two hours and which 404s
       # around each regeneration. An empty cache makes it fetch the yearly
       # feeds instead (~400 MB, about a minute), and those are regenerated
-      # once a day at 08:00 UTC, far from this job's 00:30 UTC.
+      # once a day at 08:00 UTC, far from this job's 22:17 UTC.
       - name: closure of every host
         run: python3 security/scripts/closure.py /tmp/closure.json
       - name: earlier results (persistence rule)
