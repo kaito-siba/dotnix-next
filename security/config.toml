@@ -1,7 +1,8 @@
 # Knobs for security/scripts/*.py. Each scanner can be switched off on its
 # own if it turns out to be more noise than signal.
 
-persist_days = 7   # a new finding must be seen on every complete run this long before it becomes an Issue
+persist_days = 7           # a new id must be seen on every complete run this long before it becomes an Issue
+persist_days_critical = 1  # same for severity >= 9 (1 = today and the run before). MAL-* opens at once
 cooling_days = 7   # flake inputs must point at commits at least this old (cooling.py; env COOLING_DAYS overrides)
 
 [scanners]

@@ -26,9 +26,9 @@
 - **weekly-update の inputs PR**: 本文の lock 差分 (推移依存も含む) と closure 差分を読む。本文は 60 KB で打ち切られるので、長いときは artifact の完全版を見る。冷却チェックが落ちていたら、日付が過ぎるのを待って `pr-check` を再実行するか、CVE 対応なら `security-fastlane` ラベルを付ける (ラベルの付け外しで pr-check が走り直す)。
 - **daily-security**: 最初の 1 か月は report-only。summary に「New findings」が出たら triage して、
   - 誤検知で恒久的なもの → `vulnix-whitelist.toml`
-  - 本物だが今は対応しないもの → `baseline.json` の `keys` に追加 (version が変わると再浮上する)
+  - 本物だが今は対応しないもの → `baseline.json` の `keys` に ID 単位で追加 (`vulnix:openssl:3.6.3:CVE-…` の形。version が変わると再浮上する)
   - 対応するもの → 手で Issue を立てるか、nixpkgs 側で直っていれば `weekly-update` を `scope=nixpkgs` で手動実行
-- **Issue 化を有効にする**: リポジトリ変数 `SECURITY_ISSUES=true`。baseline に無く、完全な run で 7 日続けて検出された finding だけが「パッケージ + 検出元」単位で Issue になる。open 済みの Issue はその日に検出されている限り維持され、検出されなくなったら close。途中で検出が途切れると 7 日は数え直し。スキャナが 1 つでも失敗した run は「不完全」として記録だけ残し、Issue の open / close も fastlane の dispatch もしない。
+- **Issue 化を有効にする**: リポジトリ変数 `SECURITY_ISSUES=true`。新規かどうかは CVE / GHSA などの ID 単位で判定し、baseline に無い ID が完全な run で続けて検出されたら (`MAL-*` は即日、深刻度 9 以上は 2 日連続、それ以外は 7 日。週次更新で直るものを待つための猶予で、`config.toml` で変えられる)、その ID を持つ「パッケージ + version + 検出元」単位で Issue になる。open 済みの Issue に後から別の ID が増えたら本文を更新してコメントする。Issue は baseline に無い ID がその日に検出されている限り維持され、無くなったら close。途中で検出が途切れると 7 日は数え直し。スキャナが 1 つでも失敗した run は「不完全」として記録だけ残し、Issue の open / close も fastlane の dispatch もしない。
 - **前倒し更新**: `SECURITY_FASTLANE=true` で、vulnix ヒットのパッケージが stable channel HEAD で version が上がっていたら、その日のうちに nixpkgs 更新を dispatch する。
 
 ## 初期設定 (一度だけ)
@@ -36,7 +36,7 @@
 1. Settings > Actions > General で "Allow GitHub Actions to create and approve pull requests" を on。
 2. bot 用の GitHub App。GITHUB_TOKEN で作った PR の `pr-check` は人間が run を承認するまで走らず、master は pr-check 必須なので、無いと weekly-update の自動 merge が進まない。自分名義の App (Settings > Developer settings > GitHub Apps) に権限 Contents: write、Pull requests: write (Metadata: read は自動) を付けてこのリポジトリに install し、App ID を `BOT_APP_ID`、秘密鍵 (.pem の中身) を `BOT_APP_PRIVATE_KEY` として repository secret に置く。秘密鍵に期限は無い。App の名前は後から変えても secret はそのまま。
 3. master の ruleset (設定済み): PR 必須 (承認 0)、`eval` と `cooling` の status check 必須、force push と削除禁止、bypass なし。緊急で直接 push したいときは ruleset を一時的に disabled にする。
-4. `baseline.json` は導入時のスキャン結果を手で triage したもの。
+4. `baseline.json` は 2026-11-03 の完全な run の検出結果を ID 単位で一括で入れたもの。triage はしていない (vulnix の大半は nixpkgs のパッチで直っている誤検知と見込むが未確認)。
 
 ## 手元で動かす
 
