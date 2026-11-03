@@ -262,3 +262,14 @@ comment = "A Debian packaging script (avahi-daemon-check-dns.sh), not upstream a
 ["accountsservice"]
 cve = ["CVE-2023-3297"]
 comment = "An Ubuntu-specific patch to accountsservice."
+
+# --- 2026-11-03 baseline triage: matched through another vendor's version
+# range for the same product name.
+
+["cups"]
+cve = ["CVE-2022-26691"]
+comment = "Matched via Apple's CUPS range (< 499.4); OpenPrinting CUPS fixed it in 2.4.2."
+
+["brotli-1.2.1"]
+cve = ["CVE-2026-111497"]
+comment = "Matched via the andybalholm Go port's range; Google brotli fixed it in 1.2.1."
