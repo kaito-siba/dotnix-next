@@ -22,6 +22,9 @@
           # behind the window; without it the same opacity looks far messier.
           background-opacity = 0.92;
           background-blur-radius = 20;
+
+          # unbind ctrl+enter keybind
+          keybind = "ctrl+enter=unbind";
         }
         # Same intent on both platforms -- no titlebar -- but the macOS knob
         # has to be the other one. `window-decoration = none` strips the whole
