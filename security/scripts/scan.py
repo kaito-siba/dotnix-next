@@ -20,8 +20,9 @@ the scan was introduced; a finding is new if any of its ids is outside it, and
 it then carries only those ids.
 
 Issues (--issues): one per finding key. It is *opened* once one of its new ids
-has been seen on every complete run for persist_days (judged from --history),
-and gets a comment when more ids turn up later; an open issue is *kept* as
+has been seen on every complete run for long enough (judged from --history):
+at once for MAL-*, persist_days_critical for severity >= 9, persist_days for
+the rest. It gets a comment when more ids turn up later; an open issue is *kept* as
 long as its key has any new id today, and *closed* when it has none.
 A run in which any scanner failed is incomplete: it is reported, saved with
 complete=false, and neither opens nor closes anything, because "could not
@@ -78,7 +79,7 @@ def load_config():
         return tomllib.load(f)
 
 
-def finding(source, pname, version, ids, severity, how, hosts, detail=""):
+def finding(source, pname, version, ids, severity, how, hosts, detail="", id_severity=None):
     return {
         "key": f"{source}:{pname}:{version}",
         "source": source,
@@ -87,6 +88,7 @@ def finding(source, pname, version, ids, severity, how, hosts, detail=""):
         "ids": sorted(set(ids)),
         "severity": severity,
         "severity_how": how,
+        "id_severity": dict(id_severity or {}),
         "hosts": sorted(set(hosts)),
         "detail": detail,
     }
@@ -110,6 +112,8 @@ def merge_findings(findings):
             continue
         m["ids"] = sorted(set(m["ids"]) | set(f["ids"]))
         m["hosts"] = sorted(set(m["hosts"]) | set(f["hosts"]))
+        for i, v in f["id_severity"].items():
+            m["id_severity"][i] = max(v, m["id_severity"].get(i, 0.0))
         if f["severity"] > m["severity"]:
             m["severity"], m["severity_how"] = f["severity"], f["severity_how"]
         if len(f["detail"]) > len(m["detail"]):
@@ -162,7 +166,7 @@ def run_vulnix(merged, whitelist):
         scores = item.get("cvssv3_basescore") or {}
         hosts = [h for d in by_name.get(item["name"], []) for h in d["hosts"]]
         out.append(finding("vulnix", item["pname"], item["version"], item["affected_by"],
-                           max(scores.values(), default=0.0), "nvd", hosts))
+                           max(scores.values(), default=0.0), "nvd", hosts, id_severity=scores))
     return merge_findings(out)
 
 
@@ -255,7 +259,7 @@ def run_osv(merged, extra):
         if not ids:
             continue
         eco, n, v = key
-        sev, how, summaries = 0.0, "none", []
+        sev, how, summaries, id_sev = 0.0, "none", [], {}
         for vid in sorted(set(ids)):
             if vid not in detail_cache:
                 try:
@@ -264,6 +268,7 @@ def run_osv(merged, extra):
                     raise ScannerError(f"osv detail {vid} failed: {e}") from e
             det = detail_cache[vid]
             score, score_how = osv_severity(det)
+            id_sev[vid] = 10.0 if vid.startswith("MAL-") else score
             if score > sev or (score == sev and how == "none"):
                 sev, how = score, score_how
             if det.get("summary"):
@@ -271,7 +276,7 @@ def run_osv(merged, extra):
         malicious = any(i.startswith("MAL-") for i in ids)
         out.append(finding("osv", f"{eco}/{n}", v, ids, 10.0 if malicious else sev,
                            "malicious" if malicious else how, queries[key],
-                           ("MALICIOUS PACKAGE. " if malicious else "") + "\n".join(summaries)[:2000]))
+                           ("MALICIOUS PACKAGE. " if malicious else "") + "\n".join(summaries)[:2000], id_sev))
     return merge_findings(out), len(queries)
 
 
@@ -311,6 +316,7 @@ def run_ghsa(lock):
                 "ids": [x for x in (adv.get("ghsa_id"), adv.get("cve_id")) if x],
                 "severity": sev,
                 "severity_how": "label",
+                "id_severity": {adv["ghsa_id"]: sev},
                 "hosts": [],
                 "detail": f"{adv.get('summary', '')} (published {adv.get('published_at', '')[:10]}) {adv.get('html_url', '')}",
             })
@@ -360,9 +366,18 @@ def load_history(history_dir):
     return best
 
 
-def persistent_keys(today_keys, history, today, persist_days):
-    """Keys seen on every complete run from at least persist_days ago until
-    today. A complete run without the key resets it; incomplete runs are
+def persist_days_for(f, i, cfg):
+    """How long id i of finding f must persist before it opens an issue.
+    Waiting is for what the weekly update may fix; malware is not fixed by
+    waiting, and a critical one should not wait for Saturday."""
+    if i.startswith("MAL-"):
+        return 0
+    return cfg["persist_days_critical"] if f["id_severity"].get(i, 0.0) >= 9 else cfg["persist_days"]
+
+
+def persistent_keys(today_keys, history, today):
+    """Keys seen on every complete run from at least today_keys[key] days ago
+    until today. A complete run without the key resets it; incomplete runs are
     ignored either way."""
     streak_start = {}
     days = sorted(d for d in history if d < today)
@@ -378,7 +393,7 @@ def persistent_keys(today_keys, history, today, persist_days):
             streak_start.setdefault(k, day)
     for k in today_keys:
         streak_start.setdefault(k, today)
-    return {k for k in today_keys if (today - streak_start[k]).days >= persist_days}
+    return {k for k, days in today_keys.items() if (today - streak_start[k]).days >= days}
 
 
 # ----------------------------------------------------------------- issues
@@ -450,7 +465,8 @@ def summarize(findings, new, persistent, fastlane, stats, cfg, complete):
     lines.append(f"derivations: {stats['drvs']}, vulnix hits: {stats['vulnix']}, osv queries: {stats['osv_q']} (hits {stats['osv']}), "
                  f"ghsa repos: {stats['ghsa_repos']} (advisories {stats['ghsa']})")
     lines.append(f"baseline: {stats['baseline']} ids, new (packages with ids not in baseline): {len(new)}, "
-                 f"persistent >= {cfg['persist_days']}d: {len(persistent)}, history days: {stats['history']}")
+                 f"persistent (MAL 0d / critical {cfg['persist_days_critical']}d / other {cfg['persist_days']}d): {len(persistent)}, "
+                 f"history days: {stats['history']}")
     lines.append("")
     lines.append("severity: nvd = NVD の CVSS v3、cvss3 / cvss4 = OSV のベクトルから計算、label = CRITICAL/HIGH/MODERATE/LOW の語からの代表値 (fallback)、none = 情報なし")
     lines.append("")
@@ -522,14 +538,15 @@ def main():
     for f in findings:
         unknown = {k: i for k, i in id_keys(f).items() if k not in baseline}
         if unknown:
-            new.append(dict(f, ids=sorted(set(unknown.values()))))
-            new_ids[f["key"]] = unknown
+            ids = sorted(set(unknown.values()))
+            new.append(dict(f, ids=ids, severity=max(f["id_severity"].get(i, 0.0) for i in ids)))
+            new_ids[f["key"]] = {k: persist_days_for(f, i, cfg) for k, i in unknown.items()}
 
     today = dt.date.today()
     history = load_history(args.history) if args.history else {}
     stats["history"] = len(history)
-    all_new = {k for u in new_ids.values() for k in u}
-    persistent_set = persistent_keys(all_new, history, today, cfg["persist_days"]) if complete else set()
+    all_new = {k: d for u in new_ids.values() for k, d in u.items()}
+    persistent_set = persistent_keys(all_new, history, today) if complete else set()
     persistent = [f for f in new if persistent_set & new_ids[f["key"]].keys()]
 
     fastlane = []

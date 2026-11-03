@@ -28,7 +28,7 @@
   - 誤検知で恒久的なもの → `vulnix-whitelist.toml`
   - 本物だが今は対応しないもの → `baseline.json` の `keys` に ID 単位で追加 (`vulnix:openssl:3.6.3:CVE-…` の形。version が変わると再浮上する)
   - 対応するもの → 手で Issue を立てるか、nixpkgs 側で直っていれば `weekly-update` を `scope=nixpkgs` で手動実行
-- **Issue 化を有効にする**: リポジトリ変数 `SECURITY_ISSUES=true`。新規かどうかは CVE / GHSA などの ID 単位で判定し、baseline に無い ID が完全な run で 7 日続けて検出されたら、その ID を持つ「パッケージ + version + 検出元」単位で Issue になる。open 済みの Issue に後から別の ID が増えたら本文を更新してコメントする。Issue は baseline に無い ID がその日に検出されている限り維持され、無くなったら close。途中で検出が途切れると 7 日は数え直し。スキャナが 1 つでも失敗した run は「不完全」として記録だけ残し、Issue の open / close も fastlane の dispatch もしない。
+- **Issue 化を有効にする**: リポジトリ変数 `SECURITY_ISSUES=true`。新規かどうかは CVE / GHSA などの ID 単位で判定し、baseline に無い ID が完全な run で続けて検出されたら (`MAL-*` は即日、深刻度 9 以上は 2 日連続、それ以外は 7 日。週次更新で直るものを待つための猶予で、`config.toml` で変えられる)、その ID を持つ「パッケージ + version + 検出元」単位で Issue になる。open 済みの Issue に後から別の ID が増えたら本文を更新してコメントする。Issue は baseline に無い ID がその日に検出されている限り維持され、無くなったら close。途中で検出が途切れると 7 日は数え直し。スキャナが 1 つでも失敗した run は「不完全」として記録だけ残し、Issue の open / close も fastlane の dispatch もしない。
 - **前倒し更新**: `SECURITY_FASTLANE=true` で、vulnix ヒットのパッケージが stable channel HEAD で version が上がっていたら、その日のうちに nixpkgs 更新を dispatch する。
 
 ## 初期設定 (一度だけ)
