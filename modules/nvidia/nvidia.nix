@@ -11,6 +11,9 @@
     "cudatoolkit"
     "cuda_cudart"
     "cuda_cccl"
+    "cccl" # CUDA 13 renamed cuda_cccl
+    "cuda_compat"
+    "cuda_crt"
     "cuda_nvcc"
     "cuda_cuobjdump"
     "cuda_cupti"
@@ -29,6 +32,7 @@
     "libcusolver"
     "libcusparse"
     "libnvjitlink"
+    "libnvvm"
     "libnpp"
     "cudnn"
   ];
