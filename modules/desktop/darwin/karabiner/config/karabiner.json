@@ -70,6 +70,28 @@
                 "type": "basic"
               }
             ]
+          },
+          {
+            "description": "Cmd+Shift+V で Look のクリップボード履歴を開く",
+            "manipulators": [
+              {
+                "type": "basic",
+                "from": {
+                  "key_code": "v",
+                  "modifiers": {
+                    "mandatory": [
+                      "command",
+                      "shift"
+                    ]
+                  }
+                },
+                "to": [
+                  {
+                    "shell_command": "$HOME/.nix-profile/bin/lookapp clipboard"
+                  }
+                ]
+              }
+            ]
           }
         ]
       },
