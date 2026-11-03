@@ -90,8 +90,11 @@ cve = ["CVE-2025-68146", "CVE-2026-112909", "CVE-2026-22701"]
 comment = "The Python filelock package; this is the Haskell filelock package (0.1.x)."
 
 ["gcc"]
-cve = ["CVE-2021-37322"]
-comment = "c++filt from binutils, not GCC."
+cve = ["CVE-2021-37322", "CVE-2023-4039"]
+comment = [
+  "CVE-2021-37322: c++filt from binutils, not GCC.",
+  "CVE-2023-4039: DISPUTED; about the code GCC generates for -fstack-protector on AArch64. The Linux hosts are x86_64 and the darwin hosts build with clang.",
+]
 
 ["go"]
 cve = ["CVE-2023-49292"]
