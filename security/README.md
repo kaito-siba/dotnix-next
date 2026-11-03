@@ -36,7 +36,7 @@
 1. Settings > Actions > General で "Allow GitHub Actions to create and approve pull requests" を on。
 2. bot 用の GitHub App。GITHUB_TOKEN で作った PR の `pr-check` は人間が run を承認するまで走らず、master は pr-check 必須なので、無いと weekly-update の自動 merge が進まない。自分名義の App (Settings > Developer settings > GitHub Apps) に権限 Contents: write、Pull requests: write (Metadata: read は自動) を付けてこのリポジトリに install し、App ID を `BOT_APP_ID`、秘密鍵 (.pem の中身) を `BOT_APP_PRIVATE_KEY` として repository secret に置く。秘密鍵に期限は無い。App の名前は後から変えても secret はそのまま。
 3. master の ruleset (設定済み): PR 必須 (承認 0)、`eval` と `cooling` の status check 必須、force push と削除禁止、bypass なし。緊急で直接 push したいときは ruleset を一時的に disabled にする。
-4. `baseline.json` は 2026-11-03 の完全な run の検出結果を ID 単位で一括で入れたもの。triage はしていない (vulnix の大半は nixpkgs のパッチで直っている誤検知と見込むが未確認)。
+4. `baseline.json` は 2026-11-03 の完全な run の検出結果を ID 単位で triage したもの。値が理由で、先頭の語で分類している (ビルド時のみ / 本物・stable 未修正 / nixpkgs-llama 由来 / 本物・未対応 / 通知のみ / 対象外 / 修正済み)。同名の別製品などの誤検知は `vulnix-whitelist.toml` に移した。「ビルド時のみ」は radiata の実行時 closure で判定したもので、他ホストの実行時は未確認。深刻度 9 以上はビルド時のみでも理由付きで残している。
 
 ## 手元で動かす
 
