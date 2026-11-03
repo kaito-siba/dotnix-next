@@ -9,7 +9,7 @@
     # (cache.nixos.org は unfree な CUDA redist をビルドしない)、nixpkgs-unstable
     # を追うと更新のたびに ggml-cuda の全コンパイルが走る。llama 用だけ rev を
     # 固定し、上げたいときに手で書き換える。
-    nixpkgs-llama.url = "github:NixOS/nixpkgs/8ce4ef6cb6f871616146b9fe26d2a5ae594e94fe";
+    nixpkgs-llama.url = "github:NixOS/nixpkgs/31ecbaca1bdefa45dffc409f0250bd8039ea0010";
 
     home-manager = {
       url = "github:nix-community/home-manager/release-26.05";
