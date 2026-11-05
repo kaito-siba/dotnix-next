@@ -13,6 +13,7 @@ in
         virtualisation
         tailscale
         noctalia
+        sbx
 
         # Desktop session
         desktop
@@ -42,6 +43,7 @@ in
             hm.obsidian
             hm.claude-code
             hm.ai
+            hm.sbx
             hm.llama
 
             # hm.calendar is deliberately absent: modules/calendar/secrets is
