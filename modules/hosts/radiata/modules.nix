@@ -12,7 +12,6 @@ in
         openssh
         virtualisation
         tailscale
-        claude-code
         noctalia
 
         # Desktop session
