@@ -1,0 +1,46 @@
+# Claude Code statusline. Colors: catppuccin_latte (same palette as starship.toml).
+[cship]
+lines = [
+  "$cship.model $cship.effort | $cship.cost | $cship.context_bar | $cship.usage_limits $cship.peak_usage $fill $directory$git_branch",
+]
+
+[cship.model]
+symbol = " "
+style = "bold cyan"
+
+[cship.effort]
+symbol = "⚡"
+style = "fg:#7dcfff"
+high_style = "fg:#e0af68"
+xhigh_style = "bold fg:#e0af68"
+max_style = "bold fg:#f7768e"
+
+[cship.context_bar]
+symbol = " "
+format = "[$symbol$value]($style)"
+width = 10
+style = "fg:#7dcfff"
+warn_threshold = 40.0
+warn_style = "fg:#e0af68"
+critical_threshold = 70.0
+critical_style = "bold fg:#f7768e"
+
+[cship.cost]
+symbol = " "
+style = "fg:#a9b1d6"
+warn_threshold = 10
+warn_style = "fg:#e0af68"
+critical_threshold = 50
+critical_style = "bold fg:#f7768e"
+
+[cship.usage_limits]
+five_hour_format = " {pct}% ({reset})"
+seven_day_format = " {pct}% ({reset})"
+separator = " "
+warn_threshold = 50.0
+warn_style = "fg:#e0af68"
+critical_threshold = 80.0
+critical_style = "bold fg:#f7768e"
+
+[cship.fill]
+symbol = " "
