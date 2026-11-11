@@ -4,9 +4,21 @@
   # (herdr-app / herdr-core / hc) も設定の置き場 (~/.config/herdr-app,
   # ~/.config/herdr-core) も重ならないので併存できる。
   flake.modules.homeManager.herdr-app =
-    { pkgs, lib, ... }:
+    {
+      pkgs,
+      lib,
+      config,
+      ...
+    }:
     let
       herdr-core = pkgs.callPackage ./_core.nix { };
+      herdr-app = pkgs.callPackage ./_package.nix { inherit herdr-core; };
+
+      # Show: セッションの横に、エージェントが `show <file>` で送ってきた物
+      # (主にスクリーンショット) を並べる右パネル。開いて注釈を描き、その
+      # コピーを保存したり prompt に貼り戻したりできる。中身は ./show、
+      # 組み立ては ./_show.nix。
+      show = pkgs.callPackage ./_show.nix { appVersion = herdr-app.version; };
 
       # keys.json は app の既定値を丸ごと置き換えるので、同梱の既定値
       # (defaults/keys.json の写し。app を bump したら写し直す) に足す形で作る。
@@ -66,8 +78,26 @@
     {
       home.packages = [
         herdr-core
-        (pkgs.callPackage ./_package.nix { inherit herdr-core; })
+        herdr-app
+        show.show
       ];
+
+      # mod と layout は symlink では置けない: app は mod の asset を app home
+      # の外へ辿らずに読み (gpui-kit の AppAssets)、layout には自分でも書く。
+      # なので実体をコピーする。中身が同じなら触らない (書くたびに mod が
+      # reload される)。入れた後は一度 layout を切り替える:
+      #   herdr-app do layout.switch --name show
+      home.activation.installHerdrAppShow = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        app_home="${config.xdg.configHome}/herdr-app"
+        (
+          cd ${show}
+          ${pkgs.findutils}/bin/find . -type f -print0 | while IFS= read -r -d "" file; do
+            if ! ${pkgs.diffutils}/bin/cmp -s "$file" "$app_home/$file"; then
+              run ${pkgs.coreutils}/bin/install -Dm644 "$file" "$app_home/$file"
+            fi
+          done
+        )
+      '';
 
       xdg.configFile."herdr-app/keys.json".text = builtins.toJSON (
         defaults
