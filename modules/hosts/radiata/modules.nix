@@ -12,6 +12,7 @@ in
         openssh
         virtualisation
         tailscale
+        wake-lease
         noctalia
 
         # Desktop session
