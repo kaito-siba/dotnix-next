@@ -19,6 +19,8 @@ prefix = "ctrl+space"
 detach = "prefix+d"
 rename_tab = "prefix+comma"
 close_tab = ["prefix+shift+x"]
+# herdrdev/herdr/discussions/1457
+close_pane = ["prefix+ctrl+x"]
 last_pane = "prefix+semicolon"
 cycle_pane_next = ["prefix+o", "prefix+tab"]
 open_notification_target = "prefix+shift+o"
@@ -36,4 +38,3 @@ next_tab = ["prefix+n"]
 
 reload_config = "prefix+shift+r"
 resize_mode = "prefix+r"
-
