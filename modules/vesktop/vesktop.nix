@@ -4,6 +4,19 @@
     let
       # nixpkgs の vencord に my-plugins (userplugins) を同梱する
       vencordWithPlugins = pkgs.vencord.overrideAttrs (old: {
+        # nixpkgs の 1.15.13 は Discord 側の更新に追従できず起動後に真っ暗になるため、
+        # 修正の入った版へ上げる。nixpkgs が追いついたら削除する
+        version = "1.15.17";
+        src = old.src.override {
+          tag = "v1.15.17";
+          hash = "sha256-+dN4wAFNmYVDiEe0QStqrFBRFHBBRkApqbmhuvsLZZM=";
+        };
+        # 上流で @types/react が 19 系に上がったため nixpkgs の依存修正は不要（当たらない）
+        patches = [ ];
+        postPatch = "";
+        pnpmDeps = old.pnpmDeps.overrideAttrs {
+          outputHash = "sha256-5ZSjSW7hBaHHHMscnJqrDn/y47Oi9FVi5K+nokH/Spo=";
+        };
         # pnpm install 後・ビルド前に userplugins を src へ配置
         # 依存関係は増えないため pnpmDeps のハッシュには影響しない
         preBuild = (old.preBuild or "") + ''
