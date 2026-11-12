@@ -21,12 +21,6 @@ outer_left_gap = 3
 focus_follows_mouse = false
 mouse_follows_focus = true
 
-# [overview]
-# window_previews = false
-#
-# [animation]
-# enabled = false
-
 [decorations.borders]
 width = 2
 color = "#FF45382C" # #AARRGGBB: alpha first, 8 digits required
@@ -73,6 +67,7 @@ color = "#FF45382C" # #AARRGGBB: alpha first, 8 digits required
 # Width presets on R (the generated alt-r is unjoin, now on alt-period).
 "alt-r" = "cycle-width next"
 "alt-v" = "toggle-floating"
+"alt-f" = "maximize-column"
 
 # Monitors: the ultrawide sits above the built-in display.
 "ctrl-alt-j" = "focus-monitor down"
@@ -81,3 +76,6 @@ color = "#FF45382C" # #AARRGGBB: alpha first, 8 digits required
 "ctrl-alt-shift-j" = "move-window-to-monitor down"
 "ctrl-alt-shift-k" = "move-window-to-monitor up"
 "ctrl-alt-shift-l" = "move-window-to-monitor right"
+
+# Others
+"alt-o" = "toggle-overview"
