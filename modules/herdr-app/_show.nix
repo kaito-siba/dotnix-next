@@ -27,8 +27,9 @@ let
     text = builtins.readFile ./show/show.sh;
   };
 
-  # app 同梱の main layout と tabs mod は起動のたびに上書きされ、手を入れられ
-  # ない (defaults/AGENTS.md)。Show を足した写しを自分の名前で持つ。写しを
+  # app 同梱の layout と mod は起動のたびに上書きされ、手を入れられない
+  # (defaults/AGENTS.md)。手を入れた写しを自分の名前で持つ: main layout の写しが
+  # lycoreco、tabs と agents の写しが show-tabs と backdrop-agents。写しを
   # repo に置くと bump のたびに写し直しになるので、同じ tag の原本を取ってきて
   # 差分だけ当てる。原本が変わって差分が当たらなくなったら build が落ちる。
   # hash は bump のたびに書き換える。
@@ -41,6 +42,7 @@ let
 
   mainLayout = upstream "layouts/main.json" "sha256-tEONr88ao3mw0ItiqXrzezG7Y7n/nlU30YSKjyIb6n8=";
   tabsMod = upstream "mods/tabs/main.js" "sha256-EtTsyJ2/hk1aiJ8kCtrqJVkIEuC+GDW72z5jb+FPUdM=";
+  agentsMod = upstream "mods/agents/main.js" "sha256-j9gIyhWKw6aGHeAXfOXQfveJxT7l6fgn8RNfe+4n+w0=";
 
   # mod は store のパスを知らないので、呼ぶコマンドを module として渡す。
   env = writeText "herdr-show-env.js" ''
@@ -54,7 +56,7 @@ runCommand "herdr-app-show"
     passthru = { inherit show; };
   }
   ''
-    mkdir -p $out/layouts $out/mods/show $out/mods/show-tabs
+    mkdir -p $out/layouts $out/mods/show $out/mods/show-tabs $out/mods/backdrop-agents
 
     install -m644 ${./show/main.js} $out/mods/show/main.js
     install -m644 ${./show/mod.json} $out/mods/show/mod.json
@@ -62,16 +64,29 @@ runCommand "herdr-app-show"
     install -m644 ${./show/send.svg} $out/mods/show/send.svg
     install -m644 ${env} $out/mods/show/env.js
 
-    # layout: 右パネルの stack に show を足し、タブバーを写しに差し替える。
+    # layout: 右パネルの stack に show を足し、タブバーと Agents の一覧を写しに
+    # 差し替える。
     jq '
       (.. | objects | select(.id? == "tabs") | .content.mod) = "show-tabs"
+      | (.. | objects | select(.id? == "agents") | .content.mod) = "backdrop-agents"
       | (.. | objects | select(.id? == "panel-body") | .children)
           += [{id: "show", type: "block", content: {mod: "show"}}]
-    ' ${mainLayout} > $out/layouts/show.json
+    ' ${mainLayout} > $out/layouts/lycoreco.json
     jq -e '
       [.. | objects | select(.id? == "tabs") | .content.mod] == ["show-tabs"]
+      and [.. | objects | select(.id? == "agents") | .content.mod] == ["backdrop-agents"]
       and ([.. | objects | select(.id? == "panel-body") | .children[].id] | index("show") != null)
-    ' $out/layouts/show.json > /dev/null
+    ' $out/layouts/lycoreco.json > /dev/null
+
+    # Agents の一覧: 根に絵を敷く (./backdrop/backdrop.js)。絵の大きさを決める
+    # のに根の大きさが要るので、それも取る。sidebar を畳んでいる間は敷かない。
+    { echo 'import { backdrop } from "./backdrop.js";'; cat ${agentsMod}; } > $out/mods/backdrop-agents/main.js
+    substituteInPlace $out/mods/backdrop-agents/main.js \
+      --replace-fail \
+        '.bg(t.chrome)' \
+        '.bg(t.chrome).relative().overflow_hidden().id("agents-backdrop").on_size_change((size, cx) => { this.area = size; cx.notify(); }).when(!collapsed, (el) => el.child(backdrop(this.area)))'
+    install -m644 ${./backdrop/backdrop.js} $out/mods/backdrop-agents/backdrop.js
+    echo '{ "place": "none", "title": "Agents" }' > $out/mods/backdrop-agents/mod.json
 
     # タブバー: Files / Changes の隣に Show のボタンを足す。開いていたパネル
     # を space ごとに覚える処理にも show を通す。

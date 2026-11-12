@@ -21,7 +21,9 @@ in
       # Show: セッションの横に、エージェントが `show <file>` で送ってきた物
       # (主にスクリーンショット) を並べる右パネル。開いて注釈を描き、その
       # コピーを保存したり prompt に貼り戻したりできる。中身は ./show、
-      # 組み立ては ./_show.nix。
+      # 組み立ては ./_show.nix。Show を足した layout (lycoreco) もここで作る。
+      # Agents の一覧の下には絵を敷ける: 画像は repo に入れず、
+      # ~/.config/herdr-app/backgrounds/sidebar.png に置く (./backdrop)。
       show = pkgs.callPackage ./_show.nix { appVersion = herdr-app.version; };
 
       # settings.json のうち nix で決める項目。theme は ./themes の名前で、
@@ -107,7 +109,7 @@ in
       # の外へ辿らずに読み (gpui-kit の AppAssets)、layout には自分でも書く。
       # なので実体をコピーする。中身が同じなら触らない (書くたびに mod が
       # reload される)。入れた後は一度 layout を切り替える:
-      #   herdr-app do layout.switch --name show
+      #   herdr-app do layout.switch --name lycoreco
       home.activation.installHerdrAppShow = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         app_home="${config.xdg.configHome}/herdr-app"
         (
