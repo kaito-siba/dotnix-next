@@ -35,11 +35,20 @@ in
         };
         font = fonts.coding;
         ui_font = fonts.ui;
+      }
+      # macOS では署名済みの bundle を wrapper で包めないので、同じ世代の
+      # herdr-core をここで固定する (_package.nix)。
+      // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
+        core = lib.getExe' herdr-core "herdr-core";
       };
 
-      # keys.json は app の既定値を丸ごと置き換えるので、同梱の既定値
-      # (defaults/keys.json の写し。app を bump したら写し直す) に足す形で作る。
-      defaults = lib.importJSON ./keys.default.json;
+      # keys.json は app の既定値を丸ごと置き換えるので、同梱の既定値に足す形で
+      # 作る。既定値は OS で違う (macOS は cmd が主体)。どちらも app の
+      # defaults/keys.json と defaults/keys.macos.json の写しで、app を bump
+      # したら写し直す。
+      defaults = lib.importJSON (
+        if pkgs.stdenv.hostPlatform.isDarwin then ./keys.default.macos.json else ./keys.default.json
+      );
 
       # TUI 版 (modules/shell/herdr/config.toml) と同じ prefix。keys.json の
       # キーは空白区切りで sequence になる (herdrdev/herdr-app#833)。

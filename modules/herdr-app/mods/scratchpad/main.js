@@ -18,11 +18,19 @@ const MAX_PICTURE = 16 * 1024 * 1024;
 // Claude Code は起動した folder の名前で scratchpad を作るので、pane が下の階層に居ても見つかるよう親へ遡る
 // 引数は folder、走査する範囲 (out か all)、all の時に返す件数、session id (空なら全 session)、all の時の filter の語 (glob を escape 済み)
 // 範囲が out なら直下と out/ だけを見る。scratchpad には clone した repository 等で数万ファイルが入り得るので、全体は all の時だけ走査し、filter と件数の絞り込みもこちらで済ませる
-// 出力は "mtime\tsize\tpath\0" の繰り返し。-printf と sort / head の -z は GNU 専用
+// 出力は "mtime\tsize\tpath\0" の繰り返し
+// find の -printf は GNU 専用で、macOS の find (BSD) には無い。その時は stat に同じ形で書かせる。macOS でも stat だけ GNU の事があるので、stat の種類も見る
 const LIST = `
 d=$1 mode=$2 max=$3 sid=$4
 shift 4
 tmp=\${CLAUDE_CODE_TMPDIR:-/tmp}
+if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then
+  files() { find "$@" -printf '%T@\\t%s\\t%p\\0' 2>/dev/null; }
+elif stat -c %Y / >/dev/null 2>&1; then
+  files() { find "$@" -print0 2>/dev/null | xargs -0 stat --printf='%.3Y\\t%s\\t%n\\0' 2>/dev/null; }
+else
+  files() { find "$@" -print0 2>/dev/null | xargs -0 stat -f '%m%t%z%t%N' 2>/dev/null | tr '\\n' '\\0'; }
+fi
 while :; do
   slug=$(printf %s "$d" | sed 's/[^A-Za-z0-9]/-/g')
   for s in "$tmp"/claude-*/"$slug"/*/scratchpad; do
@@ -40,17 +48,18 @@ list() {
       root=$(printf %s "$s" | sed 's/[][*?\\\\]/\\\\&/g')
       (
         for term do set -- "$@" -ipath "$root/*$term*"; shift; done
-        find "$s" \\( -name .git -o -name node_modules \\) -prune -o -type f "$@" -printf '%T@\\t%s\\t%p\\0' 2>/dev/null
+        files "$s" \\( -name .git -o -name node_modules \\) -prune -o -type f "$@"
       )
     else
-      find "$s" -maxdepth 1 -type f -printf '%T@\\t%s\\t%p\\0' 2>/dev/null
+      files "$s" -maxdepth 1 -type f
       if [ -d "$s/out" ]; then
-        find "$s/out" \\( -name .git -o -name node_modules \\) -prune -o -type f -printf '%T@\\t%s\\t%p\\0' 2>/dev/null
+        files "$s/out" \\( -name .git -o -name node_modules \\) -prune -o -type f
       fi
     fi
   done
 }
-if [ "$mode" = all ]; then list "$@" | sort -z -rn | head -z -n "$max"; else list; fi
+# sort と head の -z も GNU 専用なので、並べ替える間だけ改行区切りにする
+if [ "$mode" = all ]; then list "$@" | tr '\\0' '\\n' | sort -rn | head -n "$max" | tr '\\n' '\\0'; else list; fi
 `;
 
 function location() {
@@ -63,7 +72,8 @@ function parse(stdout, box) {
   const out = [];
   for (const record of stdout.split("\0")) {
     const [mtime, size, path] = record.split("\t");
-    const m = path?.match(/^(.*\/([^/]+)\/scratchpad)\/(.+)$/);
+    // 最初の scratchpad で切る。中に scratchpad という folder があっても、session を取り違えない
+    const m = path?.match(/^(.*?\/([^/]+)\/scratchpad)\/(.+)$/);
     if (!m) continue;
     out.push({ box, path, root: m[1], session: m[2], rel: m[3], mtime: Number(mtime) * 1000, size: Number(size), key: `${box ?? ""}|${path}` });
   }

@@ -7,7 +7,7 @@
 // SHOW) が受け持ち、mod はそれを呼ぶだけ。
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { exec, appHome, spaces, panes, focused, run, theme, props, openOverlay, closeOverlay, notify, watchFolder, shared, setShared } from "herdr";
+import { exec, appHome, spaces, panes, focused, run, theme, props, openOverlay, closeOverlay, notify, watchFolder, shared, setShared, window } from "herdr";
 import { SHOW } from "./env.js";
 
 const MOD = "show";
@@ -28,6 +28,8 @@ const absolute = (item) => `${appHome()}/${ITEMS}/${item.file}`;
 const clamp = (n) => Math.min(1, Math.max(0, n));
 const round = (n) => Math.round(n * 10000) / 10000;
 const fail = (e) => notify({ title: "Show", body: String(e?.message ?? e), level: "error" });
+// ファイルを既定の app で開くコマンドは OS で違う。
+const opener = () => (window()?.platform === "macos" ? "open" : "xdg-open");
 
 async function show(args) {
   const r = await exec(SHOW, args);
@@ -370,7 +372,7 @@ export default class Show extends View {
         .child(button("undo", "Undo", false, (_e, cx) => { this.shapes.pop(); this.drawing = null; cx.notify(); }))
         .child(button("clear", "Clear", false, (_e, cx) => { this.shapes = []; this.drawing = null; cx.notify(); }))
         .child(div().w(4).flex_none())
-        .child(button("open", "Open in viewer", false, () => { exec("xdg-open", [absolute(item)]).catch(fail); }))
+        .child(button("open", "Open in viewer", false, () => { exec(opener(), [absolute(item)]).catch(fail); }))
         .child(button("save", this.busy ? "Saving…" : "Save copy", false, (_e, cx) => this.save(cx)))
         .child(button("send", "Send", false, (_e, cx) => this.send(cx), true))
         .child(button("close", "Esc", false, () => this.dismiss())))
