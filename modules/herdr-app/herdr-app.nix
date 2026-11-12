@@ -1,3 +1,7 @@
+{ config, ... }:
+let
+  fonts = config.flake.meta.fonts;
+in
 {
   # Herdr の desktop app (herdrdev/herdr-app) と、その端末を動かす herdr-core。
   # shell モジュールの herdr (TUI, herdrdev/herdr) とは別物で、コマンド名
@@ -19,6 +23,17 @@
       # コピーを保存したり prompt に貼り戻したりできる。中身は ./show、
       # 組み立ては ./_show.nix。
       show = pkgs.callPackage ./_show.nix { appVersion = herdr-app.version; };
+
+      # settings.json のうち nix で決める項目。theme は ./themes の名前で、
+      # layout が自分の theme を持たない所で使われる。
+      settings = {
+        theme = {
+          light = "lycoreco-chisato";
+          dark = "lycoreco-takina";
+        };
+        font = fonts.coding;
+        ui_font = fonts.ui;
+      };
 
       # keys.json は app の既定値を丸ごと置き換えるので、同梱の既定値
       # (defaults/keys.json の写し。app を bump したら写し直す) に足す形で作る。
@@ -120,6 +135,33 @@
         source = ./mods/lazygit;
         recursive = true;
       };
+
+      # リコリス・リコイルの千束 (light) とたきな (dark) の theme。差し色と
+      # 状態の色は公式サイトの各キャラの色: 千束 #f0555a、たきな #2a96fa、
+      # ミズキ #00b4aa、クルミ #ffe76c、ミカ #7a5668。端末の文字になる色は、
+      # 地の上で読めるように濃さを変えてある。
+      xdg.configFile."herdr-app/themes/lycoreco-chisato.json".source = ./themes/lycoreco-chisato.json;
+      xdg.configFile."herdr-app/themes/lycoreco-takina.json".source = ./themes/lycoreco-takina.json;
+
+      # settings.json は app も書く (zoom、音、Settings での変更) ので、
+      # 丸ごとは置けない。nix で決める項目だけを上書きして、他は残す。
+      # 中身が変わらない時は触らない (書くたびに app が読み直す)。
+      # Settings の theme picker で選んだ物は layout の側に残り、ここより
+      # 優先される。
+      home.activation.setHerdrAppSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        settings="${config.xdg.configHome}/herdr-app/settings.json"
+        current='{}'
+        if [ -e "$settings" ]; then
+          current=$(${pkgs.coreutils}/bin/cat "$settings")
+        fi
+        if merged=$(${pkgs.jq}/bin/jq --argjson declared ${lib.escapeShellArg (builtins.toJSON settings)} '. + $declared' <<<"$current"); then
+          if [ "$merged" != "$(${pkgs.jq}/bin/jq . <<<"$current")" ]; then
+            run ${pkgs.coreutils}/bin/install -Dm644 /dev/stdin "$settings" <<<"$merged"
+          fi
+        else
+          echo "herdr-app: $settings を JSON として読めないので、theme と font を書き込まなかった" >&2
+        fi
+      '';
 
       xdg.configFile."herdr-app/keys.json".text = builtins.toJSON (
         defaults
