@@ -6,6 +6,10 @@ onboarding = false
 
 [experimental]
 kitty_graphics = true
+# With an IME on, the key after the prefix is composed instead of running the
+# command. This turns the IME off during prefix mode and restores it after.
+# macOS and Windows only; on Linux xremap does it (modules/xremap/xremap.nix).
+switch_ascii_input_source_in_prefix = true
 
 [theme]
 name = "catppuccin"
