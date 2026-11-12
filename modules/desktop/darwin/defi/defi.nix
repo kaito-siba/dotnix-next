@@ -33,7 +33,7 @@
       ...
     }:
     let
-      version = "0.7.0";
+      version = "0.8.0";
       log = "${config.home.homeDirectory}/Library/Logs/Defi.log";
 
       defi = pkgs.stdenvNoCC.mkDerivation {
@@ -42,7 +42,7 @@
 
         src = pkgs.fetchurl {
           url = "https://github.com/qeude/Defi/releases/download/v${version}/Defi-v${version}.zip";
-          hash = "sha256-6mLga11HdiJPfd91+OK10JfCjIVSM60Dygd481xP4Lo=";
+          hash = "sha256-LELYYF+VcR+JxK7oDx953vZ2NFCRc2dbm6d+d7Puc0Y=";
         };
 
         nativeBuildInputs = [ pkgs.unzip ];
