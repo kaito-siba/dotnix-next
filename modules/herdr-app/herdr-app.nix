@@ -69,6 +69,9 @@
         "w" = "mod.open:picker";
         "s" = "mod.open:picker";
 
+        # 自作の mod (./mods/scratchpad)。もう一度押すと閉じる。
+        "shift-p" = "mod.open:scratchpad";
+
         "shift-s" = "app.settings";
         "b" = "layout.toggle:sidebar";
         "?" = "app.help";
@@ -98,6 +101,14 @@
           done
         )
       '';
+
+      # app は mod を読む時に、その folder へ jsconfig.json と gpui-kit.d.ts を
+      # 書き出す。folder ごと store への link にすると書けないので、recursive で
+      # ファイル単位の link にする。
+      xdg.configFile."herdr-app/mods/scratchpad" = {
+        source = ./mods/scratchpad;
+        recursive = true;
+      };
 
       xdg.configFile."herdr-app/keys.json".text = builtins.toJSON (
         defaults
