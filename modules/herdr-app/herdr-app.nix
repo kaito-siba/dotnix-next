@@ -72,6 +72,7 @@
         # 自作の mod (./mods)。もう一度押すと閉じる。g は git まわりで、
         # nvim の <leader>g に合わせている。
         "shift-p" = "mod.open:scratchpad";
+        "g g" = "mod.open:lazygit";
         "g p" = "mod.open:pr";
 
         "shift-s" = "app.settings";
@@ -113,6 +114,10 @@
       };
       xdg.configFile."herdr-app/mods/pr" = {
         source = ./mods/pr;
+        recursive = true;
+      };
+      xdg.configFile."herdr-app/mods/lazygit" = {
+        source = ./mods/lazygit;
         recursive = true;
       };
 
