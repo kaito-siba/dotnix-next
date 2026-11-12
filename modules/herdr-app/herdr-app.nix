@@ -69,8 +69,10 @@
         "w" = "mod.open:picker";
         "s" = "mod.open:picker";
 
-        # 自作の mod (./mods/scratchpad)。もう一度押すと閉じる。
+        # 自作の mod (./mods)。もう一度押すと閉じる。g は git まわりで、
+        # nvim の <leader>g に合わせている。
         "shift-p" = "mod.open:scratchpad";
+        "g p" = "mod.open:pr";
 
         "shift-s" = "app.settings";
         "b" = "layout.toggle:sidebar";
@@ -107,6 +109,10 @@
       # ファイル単位の link にする。
       xdg.configFile."herdr-app/mods/scratchpad" = {
         source = ./mods/scratchpad;
+        recursive = true;
+      };
+      xdg.configFile."herdr-app/mods/pr" = {
+        source = ./mods/pr;
         recursive = true;
       };
 
