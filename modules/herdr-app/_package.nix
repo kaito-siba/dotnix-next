@@ -12,6 +12,7 @@
   libxkbcommon,
   vulkan-loader,
   wayland,
+  writeText,
   herdr-core,
 }:
 let
@@ -81,7 +82,32 @@ let
     ];
   };
 
-  darwin = {
+  # macOS の app は copyApps で ~/Applications/Home Manager Apps へコピーされる。
+  # コピーは store の外で、書き込める。本物の bundle をそこへ置くと自己更新が
+  # 動き、更新の後に core も上げようとして、nix の core に断られた失敗が画面に
+  # 出たままになる (src/update.rs)。app に更新を止める設定は無い。
+  # なので本物は store の中 (libexec) から動かし、コピーされる場所には、それを
+  # 開くだけの launcher を置く。store は書き換えられないので、更新は download
+  # の前に失敗する。
+  launcherPlist =
+    version:
+    writeText "herdr-launcher-Info.plist" (
+      lib.generators.toPlist { escape = true; } {
+        CFBundleName = "Herdr";
+        CFBundleDisplayName = "Herdr";
+        # 本物 (dev.herdr.app) と同じ app として扱われないよう、別の id にする。
+        CFBundleIdentifier = "dev.herdr.app.launcher";
+        CFBundleExecutable = "Herdr";
+        CFBundleIconFile = "Herdr";
+        CFBundlePackageType = "APPL";
+        CFBundleShortVersionString = version;
+        CFBundleVersion = version;
+        # launcher 自身は Dock に出さない。
+        LSUIElement = true;
+      }
+    );
+
+  darwin = finalAttrs: {
     # tarball の頂上が Herdr.app なので、unpack の後にその中へ入らせない。
     sourceRoot = ".";
 
@@ -89,15 +115,23 @@ let
     # 作らずそのまま置き、fixup もさせない。
     # - core は wrapper で PATH に足せないので、settings.json の core で固定する
     #   (herdr-app.nix)。
-    # - 自己更新は止められない。bundle の隣、つまり store の中に書こうとして
-    #   download の前に失敗するだけ (src/update.rs)。
     # - CLI は bundle の中の実行ファイルそのもの。
     installPhase = ''
       runHook preInstall
 
-      mkdir -p $out/Applications $out/bin
-      cp -R Herdr.app $out/Applications/
-      ln -s ../Applications/Herdr.app/Contents/MacOS/Herdr $out/bin/herdr-app
+      mkdir -p $out/libexec $out/bin
+      cp -R Herdr.app $out/libexec/
+      ln -s ../libexec/Herdr.app/Contents/MacOS/Herdr $out/bin/herdr-app
+
+      launcher=$out/Applications/Herdr.app/Contents
+      mkdir -p $launcher/MacOS $launcher/Resources
+      cp ${launcherPlist finalAttrs.version} $launcher/Info.plist
+      cp Herdr.app/Contents/Resources/Herdr.icns $launcher/Resources/Herdr.icns
+      cat > $launcher/MacOS/Herdr <<EOF
+      #!/bin/sh
+      exec /usr/bin/open "$out/libexec/Herdr.app" --args "\$@"
+      EOF
+      chmod +x $launcher/MacOS/Herdr
 
       runHook postInstall
     '';
@@ -130,5 +164,5 @@ stdenv.mkDerivation (
       mainProgram = "herdr-app";
     };
   }
-  // (if stdenv.hostPlatform.isDarwin then darwin else linux)
+  // (if stdenv.hostPlatform.isDarwin then darwin finalAttrs else linux)
 )
