@@ -31,6 +31,7 @@
         programs.nh = {
           enable = true;
           clean.enable = true;
+          # Keep in sync with launchd.daemons.nh-clean in nh-darwin.nix.
           clean.extraArgs = "--keep-since 14d --keep 5";
         };
       };
