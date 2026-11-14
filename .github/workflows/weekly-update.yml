@@ -105,7 +105,7 @@ jobs:
           PR: ${{ steps.pr.outputs.pull-request-number }}
         run: |
           gh pr merge "$PR" --squash --auto --match-head-commit "${{ steps.pr.outputs.pull-request-head-sha }}"
-          timeout 30m gh pr checks "$PR" --watch --fail-level error
+          timeout 30m gh pr checks "$PR" --watch --fail-fast
           for i in $(seq 1 30); do
             state=$(gh pr view "$PR" --json state --jq .state)
             [ "$state" = "MERGED" ] && break
