@@ -167,7 +167,13 @@ in
         fi
         if merged=$(${pkgs.jq}/bin/jq --argjson declared ${lib.escapeShellArg (builtins.toJSON settings)} '. + $declared' <<<"$current"); then
           if [ "$merged" != "$(${pkgs.jq}/bin/jq . <<<"$current")" ]; then
-            run ${pkgs.coreutils}/bin/install -Dm644 /dev/stdin "$settings" <<<"$merged"
+            # /dev/stdin からは install できない: macOS では stat した
+            # /dev/stdin (devfs) と開いた fd の inode が食い違い、coreutils が
+            # "replaced while being copied" として中止する。一時ファイルを経由する。
+            tmp=$(${pkgs.coreutils}/bin/mktemp)
+            printf '%s\n' "$merged" >"$tmp"
+            run ${pkgs.coreutils}/bin/install -Dm644 "$tmp" "$settings"
+            ${pkgs.coreutils}/bin/rm -f "$tmp"
           fi
         else
           echo "herdr-app: $settings を JSON として読めないので、theme と font を書き込まなかった" >&2
