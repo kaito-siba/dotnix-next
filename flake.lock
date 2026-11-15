@@ -105,6 +105,23 @@
         "type": "github"
       }
     },
+    "herbarium": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1794723106,
+        "narHash": "sha256-3T/ZBUyDrAWpKFlT8bp5POmDSkEemrTpi6Fpi5J4HG8=",
+        "ref": "feat/flavescens-node",
+        "rev": "a62e22cea1fdf61f1b0effe7b3bd3483cadaeae9",
+        "revCount": 22,
+        "type": "git",
+        "url": "ssh://git@github.com/kaito-siba/herbarium"
+      },
+      "original": {
+        "ref": "feat/flavescens-node",
+        "type": "git",
+        "url": "ssh://git@github.com/kaito-siba/herbarium"
+      }
+    },
     "herdr": {
       "inputs": {
         "nixpkgs": [
@@ -324,6 +341,7 @@
       "inputs": {
         "fievel": "fievel",
         "flake-parts": "flake-parts",
+        "herbarium": "herbarium",
         "herdr": "herdr",
         "home-manager": "home-manager",
         "import-tree": "import-tree",

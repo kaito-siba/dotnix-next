@@ -33,6 +33,9 @@ in
 
         # Users
         w963n
+
+        # QDevice
+        qnetd
       ]
       ++ [
         {
