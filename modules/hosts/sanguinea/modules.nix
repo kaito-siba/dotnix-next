@@ -13,6 +13,7 @@ in
         virtualisation
         tailscale
         noctalia
+        sbx
 
         # Desktop session
         desktop
@@ -44,6 +45,7 @@ in
             hm.obsidian
             hm.claude-code
             hm.ai
+            hm.sbx
 
             # hm.calendar is deliberately absent: modules/calendar/secrets is
             # not encrypted for this host's w963n age key yet, so the
