@@ -73,6 +73,7 @@ in
 
             # Development
             hm.dev
+            hm.herdr-app
           ];
         }
       ];

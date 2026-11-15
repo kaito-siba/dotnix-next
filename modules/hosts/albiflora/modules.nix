@@ -70,6 +70,7 @@ in
             hm.onlyoffice
             hm.smoothcsv
             hm.video-player
+            hm.herdr-app
 
             # Tracking
             hm.activitywatch
