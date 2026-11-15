@@ -32,6 +32,8 @@ CONFIG = json.load(open(os.environ["WAKE_LEASE_CONFIG"]))
 SERVICES = CONFIG["services"]
 DEFAULT_TTL = 5400
 SUSPEND_DELAY = 5  # let the release response reach the client first
+USER_EVENTS = {1, 2, 3}  # EV_KEY, EV_REL, EV_ABS (not EV_SYN / EV_MSC / EV_LED)
+INPUT_SETTLE = 30
 GPU_WORK_MIB = 1024  # desktop apps (portal, Electron) hold small GPU contexts; only count real work
 
 lock = threading.RLock()
@@ -70,10 +72,19 @@ def watch_input():
 
     def reader(dev):
         global last_input
-        size = struct.calcsize("llHHi")
+        fmt = "llHHi"  # struct input_event: timeval, type, code, value
+        size = struct.calcsize(fmt)
+        opened = time.time()
         try:
             with open(dev, "rb") as f:
-                while f.read(size):
+                while data := f.read(size):
+                    _sec, _usec, type_, code, value = struct.unpack(fmt, data)
+                    # USB devices are re-enumerated on resume; the compositor then restores LEDs etc.
+                    # Only key/motion events count, and not while a newly opened device settles.
+                    if type_ not in USER_EVENTS or time.time() - opened < INPUT_SETTLE:
+                        continue
+                    if managed_since is not None and last_input <= managed_since:
+                        log(f"input on {dev}: type={type_} code={code} value={value}")
                     last_input = time.time()
         except OSError:
             pass
@@ -84,7 +95,7 @@ def watch_input():
             if dev not in watching:
                 watching.add(dev)
                 threading.Thread(target=reader, args=(dev,), daemon=True).start()
-        time.sleep(60)
+        time.sleep(10)
 
 
 def unit_pids():
