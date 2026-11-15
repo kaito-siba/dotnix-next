@@ -13,6 +13,14 @@
             lib.replaceStrings [ "        tap\n" ] [ "" ] (
               builtins.readFile ../../desktop/linux/niri/config/config.kdl
             )
+            # クラムシェル運用: 蓋を閉じても suspend しないので、内蔵パネルは自前で消す。
+            + ''
+
+              switch-events {
+                  lid-close { spawn "niri" "msg" "output" "eDP-1" "off"; }
+                  lid-open { spawn "niri" "msg" "output" "eDP-1" "on"; }
+              }
+            ''
           )
         );
 
