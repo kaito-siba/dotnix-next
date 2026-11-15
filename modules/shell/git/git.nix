@@ -52,10 +52,10 @@
           enable = true;
           settings = {
             git = {
-              pagers = [
+              diffRenderers = [
                 {
-                  colorArg = "always";
-                  externalDiffCommand = "difft --color=always --display=inline --syntax-highlight=on --tab-width=2";
+                  type = "extDiff";
+                  command = "difft --color=always --display=inline --syntax-highlight=on --tab-width=2";
                 }
               ];
             };
