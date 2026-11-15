@@ -43,6 +43,7 @@ in
             # Development
             hm.dev
             hm.ai
+            hm.herdr-app
 
             # Time tracking
             hm.activitywatch
