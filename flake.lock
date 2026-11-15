@@ -108,16 +108,15 @@
     "herbarium": {
       "flake": false,
       "locked": {
-        "lastModified": 1794723106,
-        "narHash": "sha256-3T/ZBUyDrAWpKFlT8bp5POmDSkEemrTpi6Fpi5J4HG8=",
-        "ref": "feat/flavescens-node",
-        "rev": "a62e22cea1fdf61f1b0effe7b3bd3483cadaeae9",
-        "revCount": 22,
+        "lastModified": 1794730497,
+        "narHash": "sha256-l1XSRKetCz/HWzFZ0Lk34pjKGQ/CFeJ1vgZwC9ECZ7I=",
+        "ref": "refs/heads/main",
+        "rev": "180db65ffd5b100ca9a65a1c13ba2c0f559edb52",
+        "revCount": 26,
         "type": "git",
         "url": "ssh://git@github.com/kaito-siba/herbarium"
       },
       "original": {
-        "ref": "feat/flavescens-node",
         "type": "git",
         "url": "ssh://git@github.com/kaito-siba/herbarium"
       }
