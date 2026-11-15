@@ -5,7 +5,7 @@
     services.power-profiles-daemon.enable = true;
 
     # エージェント常駐機としてクラムシェルで運用するので、蓋を閉じても suspend しない。
-    # 内蔵パネルは niri が蓋に合わせて消す。
+    # 内蔵パネルは niri の switch-events で消す (./home-manager.nix)。
     services.logind.settings.Login = {
       HandleLidSwitch = "ignore";
       HandleLidSwitchExternalPower = "ignore";
