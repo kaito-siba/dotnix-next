@@ -58,7 +58,7 @@ in
       # コマンドに読み替えたもの。app に相当するコマンドが無いものは移せない:
       # last_pane (;), cycle_pane (o / tab / shift-tab), resize_mode (r,
       # herdrdev/herdr-app#117), open_notification_target (shift-o),
-      # new_worktree (shift-g), copy_mode ([)。
+      # new_worktree (shift-g)。
       prefixed = {
         # window を閉じても端末は core で動き続けるので、detach に当たる。
         "d" = "window.close";
@@ -100,6 +100,8 @@ in
         "shift-p" = "mod.open:scratchpad";
         "g g" = "mod.open:lazygit";
         "g p" = "mod.open:pr";
+        # app に copy mode は無いので、選択を動かす command を使う mod で作る。
+        "[" = "mod.open:copy-mode";
 
         "shift-s" = "app.settings";
         "b" = "layout.toggle:sidebar";
@@ -144,6 +146,10 @@ in
       };
       xdg.configFile."herdr-app/mods/lazygit" = {
         source = ./mods/lazygit;
+        recursive = true;
+      };
+      xdg.configFile."herdr-app/mods/copy-mode" = {
+        source = ./mods/copy-mode;
         recursive = true;
       };
 

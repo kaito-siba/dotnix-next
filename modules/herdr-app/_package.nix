@@ -22,11 +22,11 @@ let
   sources = {
     x86_64-linux = {
       target = "linux-x86_64";
-      hash = "sha256-+Z4eBL6CwOELL2nudAPKNDhvSA2SUR31hlr0cD52Vd0=";
+      hash = "sha256-KC0mMhlrI4IGz+Zr+2HA+vKZyhyRhDvQdlIbvjZXEhY=";
     };
     aarch64-darwin = {
       target = "macos-aarch64";
-      hash = "sha256-NjPqXYaOpBD4Tfu3eiYgXeMx9N9S/bP7AGsrOXhFhFk=";
+      hash = "sha256-mQAIderZMzoz9ctgJ0zNnPnT5HNg8DYTpGcpUQXHHAQ=";
     };
   };
   source =
@@ -146,7 +146,7 @@ stdenv.mkDerivation (
     # ソースビルドは Rust と Zig と ghostty の submodule が要るので、公式の
     # release バイナリを包む。nixpkgs 未収録なので手動 bump (version と hash を
     # 書き換える)。
-    version = "0.1.15";
+    version = "0.1.16";
 
     src = fetchurl {
       url = "https://releases.herdr.dev/app/${finalAttrs.version}/herdr-app-${source.target}.tar.gz";
