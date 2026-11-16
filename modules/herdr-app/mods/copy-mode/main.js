@@ -5,7 +5,7 @@
 // 単語単位の移動 (w / b / e) と行単位の選択の伸び縮みは、相当する command が無いので作れない
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { focused, run, notify, props, closeOverlay, theme } from "herdr";
+import { focused, panes, terminals, run, notify, props, closeOverlay, theme } from "herdr";
 
 const MOVES = {
   h: "left", j: "down", k: "up", l: "right",
@@ -40,6 +40,27 @@ export default class CopyMode extends View {
     closeOverlay(props().overlay);
   }
 
+  // 選択中でない時に cursor が動く先。分からない移動は null
+  // 行の数は pane の scroll から、alternate screen (vim 等。履歴が無い) では端末の rows から取る
+  target(move, at) {
+    const f = focused();
+    const scroll = panes().find(p => p.pane === f?.pane)?.scroll;
+    const rows = terminals().find(t => t.address === f?.terminal)?.rows;
+    const last = scroll ? scroll.total - 1 : rows ? rows - 1 : null;
+    const page = scroll?.len ?? rows;
+    switch (move) {
+      case "up": return { row: Math.max(0, at.row - 1), col: at.col };
+      case "down": return last == null ? null : { row: Math.min(last, at.row + 1), col: at.col };
+      case "page_up": return page ? { row: Math.max(0, at.row - page), col: at.col } : null;
+      case "page_down": return page && last != null ? { row: Math.min(last, at.row + page), col: at.col } : null;
+      case "home": return { row: 0, col: 0 };
+      case "end": return last == null ? null : { row: last, col: 0 };
+      case "line_start": return { row: at.row, col: 0 };
+    }
+    // 左右と行末は、全角の文字や行の折り返しで動く先が変わるので、app に任せる
+    return null;
+  }
+
   key(e, cx) {
     const m = e.modifiers ?? {};
     // shift を押した文字 (G, $, V) は key_char に入る
@@ -48,8 +69,15 @@ export default class CopyMode extends View {
     const move = m.control ? CTRL_MOVES[k] : MOVES[k];
     if (move) {
       // 選択が無くなっていたら (click で消された等)、cursor から選び直す
-      if (sel) run("terminal.adjust_selection", { direction: move });
-      else run("terminal.select");
+      if (!sel) run("terminal.select");
+      else {
+        // adjust_selection は選択の end だけを動かすので、選択中でなければ動いた先へ 1 cell の選択を置き直す
+        // 続けて頼んだ command は間に描画を挟まず実行されるので、伸びた選択は画面に出ない
+        // adjust_selection も呼ぶのは、動いた先が見えるよう scroll させるため
+        const to = this.visual ? null : this.target(move, sel.end);
+        if (!to || !same(to, sel.end)) run("terminal.adjust_selection", { direction: move });
+        if (to && !same(to, sel.end)) run("terminal.select", { at: to });
+      }
     } else if (m.control) return;
     else if (k === "v") {
       // 選択をやめる時は、cursor の位置に 1 cell だけ残す
@@ -72,8 +100,8 @@ export default class CopyMode extends View {
   render() {
     const t = theme();
     const sel = focused()?.selection;
-    // adjust_selection は選択の end だけを動かす。選択中でなければ、動いた先へ 1 cell の選択を置き直して cursor にする
-    // run は後から実行されるので、動いた結果はここ (選択が変わると描き直される) でしか分からない
+    // 動く先が分からなかった移動は、選択が伸びた後のここ (選択が変わると描き直される) で 1 cell に戻す
+    // 伸びた選択が一度描かれるので、少しちらつく
     if (!this.visual && sel && !same(sel.start, sel.end)) run("terminal.select", { at: sel.end });
     const hint = this.visual ? "y copy · esc cancel" : "hjkl 0 $ g G · v select · V line · q quit";
     return h_flex()
