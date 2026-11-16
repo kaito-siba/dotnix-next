@@ -9,11 +9,11 @@ let
   sources = {
     x86_64-linux = {
       target = "linux-x86_64";
-      hash = "sha256-rGuGiQxFGjdYRiCqpDi3G8DQvUMKLnwdfglfBSxBTnQ=";
+      hash = "sha256-eEJHVcEKQN3jigvbVcIKwZcG6a4F7Wj8Ks8fz/DZQcE=";
     };
     aarch64-darwin = {
       target = "macos-aarch64";
-      hash = "sha256-5YmF0/726QnzPTxaRCbkiYyBVkpVfUY2WRzsnjoGryY=";
+      hash = "sha256-GrON2ScPY6j3lNbWDocC6w0chacr2oXXNeXupD8F/+0=";
     };
   };
   source =
@@ -26,7 +26,7 @@ stdenv.mkDerivation (
     pname = "herdr-core";
     # nixpkgs 未収録のバイナリなので手動 bump (version と hash を書き換える)。
     # herdr-app の distribution/core-version が要求する最低 version を下回らせない。
-    version = "0.1.20";
+    version = "0.1.21";
 
     src = fetchurl {
       url = "https://releases.herdr.dev/core/${finalAttrs.version}/herdr-core-${source.target}.tar.gz";
