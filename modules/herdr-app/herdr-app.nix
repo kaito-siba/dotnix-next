@@ -90,10 +90,10 @@ in
         "$" = "space.rename";
         "shift-w" = "space.rename";
 
-        # workspace_picker と goto はどちらも picker (tab / space / agent を
-        # 絞り込んで移動) に寄せる。
+        # workspace_picker は picker (tab を絞り込んで移動、新しい tab や space
+        # も作れる)、goto は自作の navigator (pane を絞り込んで移動) に当てる。
         "w" = "mod.open:picker";
-        "s" = "mod.open:picker";
+        "s" = "mod.open:navigator";
 
         # 自作の mod (./mods)。もう一度押すと閉じる。g は git まわりで、
         # nvim の <leader>g に合わせている。
@@ -146,6 +146,10 @@ in
       };
       xdg.configFile."herdr-app/mods/lazygit" = {
         source = ./mods/lazygit;
+        recursive = true;
+      };
+      xdg.configFile."herdr-app/mods/navigator" = {
+        source = ./mods/navigator;
         recursive = true;
       };
       xdg.configFile."herdr-app/mods/copy-mode" = {
