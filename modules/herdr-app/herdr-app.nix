@@ -158,6 +158,16 @@ in
         source = ./mods/sandbox;
         recursive = true;
       };
+      # 右パネルの Inbox と Tasks。layout とタブバーへの組み込みは ./_show.nix、
+      # Tasks の出す要約を書く側は ./task-notes.nix。
+      xdg.configFile."herdr-app/mods/inbox" = {
+        source = ./mods/inbox;
+        recursive = true;
+      };
+      xdg.configFile."herdr-app/mods/tasks" = {
+        source = ./mods/tasks;
+        recursive = true;
+      };
       xdg.configFile."herdr-app/mods/copy-mode" = {
         source = ./mods/copy-mode;
         recursive = true;
