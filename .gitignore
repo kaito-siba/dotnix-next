@@ -1,2 +1,5 @@
 .claude/settings.local.json
 __pycache__/
+# herdr-app が mod の folder に書き出す型と設定 (herdr-app check でも出る)
+modules/herdr-app/mods/*/gpui-kit.d.ts
+modules/herdr-app/mods/*/jsconfig.json
