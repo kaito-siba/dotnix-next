@@ -41,8 +41,8 @@ let
     };
 
   mainLayout = upstream "layouts/main.json" "sha256-tEONr88ao3mw0ItiqXrzezG7Y7n/nlU30YSKjyIb6n8=";
-  tabsMod = upstream "mods/tabs/main.js" "sha256-0TaO5MHdWIrco8IOAV+L9Bx+meS5WRyRDMSroUyQ/iY=";
-  agentsMod = upstream "mods/agents/main.js" "sha256-DwE7qRcYMJknwAkIAmPH3UPIeMb/4M57XuxjttnjPuo=";
+  tabsMod = upstream "mods/tabs/main.js" "sha256-8IDeCL2xjkndsDnqD/GGupxlkf4kKyhbgYSnk+GQ6o4=";
+  agentsMod = upstream "mods/agents/main.js" "sha256-PvcUu/GH+BxPu5GUn0+iuS8NztosUsm8Aeq+xfPX4MQ=";
 
   # mod は store のパスを知らないので、呼ぶコマンドを module として渡す。
   env = writeText "herdr-show-env.js" ''
