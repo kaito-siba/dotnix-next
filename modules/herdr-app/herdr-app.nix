@@ -100,6 +100,8 @@ in
         "shift-p" = "mod.open:scratchpad";
         "g g" = "mod.open:lazygit";
         "g p" = "mod.open:pr";
+        # sbx の sandbox の中のファイル、port の公開、通信の許可、負荷を見る。
+        "shift-b" = "mod.open:sandbox";
         # app に copy mode は無いので、選択を動かす command を使う mod で作る。
         "[" = "mod.open:copy-mode";
 
@@ -150,6 +152,10 @@ in
       };
       xdg.configFile."herdr-app/mods/navigator" = {
         source = ./mods/navigator;
+        recursive = true;
+      };
+      xdg.configFile."herdr-app/mods/sandbox" = {
+        source = ./mods/sandbox;
         recursive = true;
       };
       xdg.configFile."herdr-app/mods/copy-mode" = {
