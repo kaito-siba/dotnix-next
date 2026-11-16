@@ -4,7 +4,7 @@ A client (allowed by its tailnet node name) that woke this host by Wake-on-LAN t
 lease on a service, uses it, and releases the lease. A service's unit runs while it has
 leases. When no lease is left on any service, the host is suspended only if the first
 lease said the client woke it ("woke": true) and nobody has used the host since: no
-keyboard/mouse input, no remote login session, no other GPU work, no sleep inhibitor in
+keyboard/mouse input, no new remote login session, no other GPU work, no sleep inhibitor in
 block mode. Any sign of use cancels the suspend for this wake.
 
 Config (JSON file in $WAKE_LEASE_CONFIG):
@@ -56,8 +56,8 @@ def input_devices():
     """Event devices of keyboards and mice (udev ID_INPUT_KEYBOARD / ID_INPUT_MOUSE)."""
     out = []
     for path in glob.glob("/sys/class/input/event*/dev"):
-        dev = open(path).read().strip()
-        try:
+        try:  # devices come and go (USB re-enumeration on resume)
+            dev = open(path).read().strip()
             udev = open(f"/run/udev/data/c{dev}").read()
         except OSError:
             continue
@@ -111,14 +111,35 @@ def unit_pids():
     return pids
 
 
+def ssh_peers_heard(seconds, process="sshd"):
+    """Hosts whose connection to sshd delivered data within the last `seconds` of uptime."""
+    peers = set()
+    for line in run("ss", "-tinpOH", "state", "established").stdout.splitlines():
+        fields = line.split()
+        lastrcv = [f for f in fields if f.startswith("lastrcv:")]  # ms; data segments only, not ACKs
+        if f'(("{process}' in line and lastrcv and int(lastrcv[0].split(":")[1]) < seconds * 1000:
+            peers.add(fields[3].rsplit(":", 1)[0].strip("[]"))
+    return peers
+
+
 def signs_of_use():
     """Reasons the host is in use by someone other than the lease clients (empty = idle)."""
     reasons = []
     if managed_since is not None and last_input > managed_since:
         reasons.append("keyboard/mouse input")
-    for s in json.loads(run("loginctl", "list-sessions", "--json=short").stdout or "[]"):
-        if run("loginctl", "show-session", s["session"], "-p", "Remote", "--value").stdout.strip() == "yes":
-            reasons.append(f"remote session {s['session']} ({s.get('user')})")
+    heard = ssh_peers_heard(time.time() - managed_since) if managed_since is not None else set()
+    sessions = run("busctl", "call", "--json=short", "org.freedesktop.login1", "/org/freedesktop/login1",
+                   "org.freedesktop.login1.Manager", "ListSessions").stdout
+    for session, _uid, user, _seat, path in (json.loads(sessions)["data"][0] if sessions else []):
+        props = run("busctl", "get-property", "--json=short", "org.freedesktop.login1", path,
+                    "org.freedesktop.login1.Session", "Remote", "Timestamp", "RemoteHost").stdout.splitlines()
+        if len(props) != 3:
+            continue  # session ended meanwhile
+        remote, started, host = (json.loads(p)["data"] for p in props)
+        # An SSH session left open before the host slept lingers after resume until its dead
+        # connection times out; it is a sign of use only if its client has sent something since.
+        if remote and managed_since is not None and (started / 1e6 > managed_since or host in heard):
+            reasons.append(f"remote session {session} ({user})")
     apps = run("nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits").stdout
     own = unit_pids()
     gpu = [pid for pid, mem in (line.split(", ") for line in apps.splitlines())
