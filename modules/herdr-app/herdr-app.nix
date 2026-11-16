@@ -15,6 +15,7 @@ in
       ...
     }:
     let
+      cfg = config.herdr-app;
       herdr-core = pkgs.callPackage ./_core.nix { };
       herdr-app = pkgs.callPackage ./_package.nix { inherit herdr-core; };
 
@@ -112,107 +113,120 @@ in
       // lib.genAttrs (map toString (lib.range 1 9)) (n: "tab.select:${n}");
     in
     {
-      home.packages = [
-        herdr-core
-        herdr-app
-        show.show
-      ];
-
-      # mod と layout は symlink では置けない: app は mod の asset を app home
-      # の外へ辿らずに読み (gpui-kit の AppAssets)、layout には自分でも書く。
-      # なので実体をコピーする。中身が同じなら触らない (書くたびに mod が
-      # reload される)。入れた後は一度 layout を切り替える:
-      #   herdr-app do layout.switch --name lycoreco
-      home.activation.installHerdrAppShow = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-        app_home="${config.xdg.configHome}/herdr-app"
-        (
-          cd ${show}
-          ${pkgs.findutils}/bin/find . -type f -print0 | while IFS= read -r -d "" file; do
-            if ! ${pkgs.diffutils}/bin/cmp -s "$file" "$app_home/$file"; then
-              run ${pkgs.coreutils}/bin/install -Dm644 "$file" "$app_home/$file"
-            fi
-          done
-        )
-      '';
-
-      # app は mod を読む時に、その folder へ jsconfig.json と gpui-kit.d.ts を
-      # 書き出す。folder ごと store への link にすると書けないので、recursive で
-      # ファイル単位の link にする。
-      xdg.configFile."herdr-app/mods/scratchpad" = {
-        source = ./mods/scratchpad;
-        recursive = true;
-      };
-      xdg.configFile."herdr-app/mods/pr" = {
-        source = ./mods/pr;
-        recursive = true;
-      };
-      xdg.configFile."herdr-app/mods/lazygit" = {
-        source = ./mods/lazygit;
-        recursive = true;
-      };
-      xdg.configFile."herdr-app/mods/navigator" = {
-        source = ./mods/navigator;
-        recursive = true;
-      };
-      xdg.configFile."herdr-app/mods/sandbox" = {
-        source = ./mods/sandbox;
-        recursive = true;
-      };
-      # 右パネルの Inbox と Tasks。layout とタブバーへの組み込みは ./_show.nix、
-      # Tasks の出す要約を書く側は ./task-notes.nix。
-      xdg.configFile."herdr-app/mods/inbox" = {
-        source = ./mods/inbox;
-        recursive = true;
-      };
-      xdg.configFile."herdr-app/mods/tasks" = {
-        source = ./mods/tasks;
-        recursive = true;
-      };
-      xdg.configFile."herdr-app/mods/copy-mode" = {
-        source = ./mods/copy-mode;
-        recursive = true;
+      options.herdr-app.workDigestUrl = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "http://albiflora:8792";
+        description = "Inbox に Slack の依頼と standup の下書きを出す時の、work-digest の API の URL (modules/work-digest)";
       };
 
-      # リコリス・リコイルの千束 (light) とたきな (dark) の theme。差し色と
-      # 状態の色は公式サイトの各キャラの色: 千束 #f0555a、たきな #2a96fa、
-      # ミズキ #00b4aa、クルミ #ffe76c、ミカ #7a5668。端末の文字になる色は、
-      # 地の上で読めるように濃さを変えてある。
-      xdg.configFile."herdr-app/themes/lycoreco-chisato.json".source = ./themes/lycoreco-chisato.json;
-      xdg.configFile."herdr-app/themes/lycoreco-takina.json".source = ./themes/lycoreco-takina.json;
+      config = {
+        home.packages = [
+          herdr-core
+          herdr-app
+          show.show
+        ];
 
-      # settings.json は app も書く (zoom、音、Settings での変更) ので、
-      # 丸ごとは置けない。nix で決める項目だけを上書きして、他は残す。
-      # 中身が変わらない時は触らない (書くたびに app が読み直す)。
-      # Settings の theme picker で選んだ物は layout の側に残り、ここより
-      # 優先される。
-      home.activation.setHerdrAppSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-        settings="${config.xdg.configHome}/herdr-app/settings.json"
-        current='{}'
-        if [ -e "$settings" ]; then
-          current=$(${pkgs.coreutils}/bin/cat "$settings")
-        fi
-        if merged=$(${pkgs.jq}/bin/jq --argjson declared ${lib.escapeShellArg (builtins.toJSON settings)} '. + $declared' <<<"$current"); then
-          if [ "$merged" != "$(${pkgs.jq}/bin/jq . <<<"$current")" ]; then
-            # /dev/stdin からは install できない: macOS では stat した
-            # /dev/stdin (devfs) と開いた fd の inode が食い違い、coreutils が
-            # "replaced while being copied" として中止する。一時ファイルを経由する。
-            tmp=$(${pkgs.coreutils}/bin/mktemp)
-            printf '%s\n' "$merged" >"$tmp"
-            run ${pkgs.coreutils}/bin/install -Dm644 "$tmp" "$settings"
-            ${pkgs.coreutils}/bin/rm -f "$tmp"
+        # mod と layout は symlink では置けない: app は mod の asset を app home
+        # の外へ辿らずに読み (gpui-kit の AppAssets)、layout には自分でも書く。
+        # なので実体をコピーする。中身が同じなら触らない (書くたびに mod が
+        # reload される)。入れた後は一度 layout を切り替える:
+        #   herdr-app do layout.switch --name lycoreco
+        home.activation.installHerdrAppShow = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+          app_home="${config.xdg.configHome}/herdr-app"
+          (
+            cd ${show}
+            ${pkgs.findutils}/bin/find . -type f -print0 | while IFS= read -r -d "" file; do
+              if ! ${pkgs.diffutils}/bin/cmp -s "$file" "$app_home/$file"; then
+                run ${pkgs.coreutils}/bin/install -Dm644 "$file" "$app_home/$file"
+              fi
+            done
+          )
+        '';
+
+        # app は mod を読む時に、その folder へ jsconfig.json と gpui-kit.d.ts を
+        # 書き出す。folder ごと store への link にすると書けないので、recursive で
+        # ファイル単位の link にする。
+        xdg.configFile."herdr-app/mods/scratchpad" = {
+          source = ./mods/scratchpad;
+          recursive = true;
+        };
+        xdg.configFile."herdr-app/mods/pr" = {
+          source = ./mods/pr;
+          recursive = true;
+        };
+        xdg.configFile."herdr-app/mods/lazygit" = {
+          source = ./mods/lazygit;
+          recursive = true;
+        };
+        xdg.configFile."herdr-app/mods/navigator" = {
+          source = ./mods/navigator;
+          recursive = true;
+        };
+        xdg.configFile."herdr-app/mods/sandbox" = {
+          source = ./mods/sandbox;
+          recursive = true;
+        };
+        # 右パネルの Inbox と Tasks。layout とタブバーへの組み込みは ./_show.nix、
+        # Tasks の出す要約を書く側は ./task-notes.nix。
+        xdg.configFile."herdr-app/mods/inbox" = {
+          source = ./mods/inbox;
+          recursive = true;
+        };
+        # mod は nix の設定を知らないので、module として渡す。
+        xdg.configFile."herdr-app/mods/inbox/env.js".text = ''
+          export const WORK_DIGEST = ${builtins.toJSON cfg.workDigestUrl};
+        '';
+        xdg.configFile."herdr-app/mods/tasks" = {
+          source = ./mods/tasks;
+          recursive = true;
+        };
+        xdg.configFile."herdr-app/mods/copy-mode" = {
+          source = ./mods/copy-mode;
+          recursive = true;
+        };
+
+        # リコリス・リコイルの千束 (light) とたきな (dark) の theme。差し色と
+        # 状態の色は公式サイトの各キャラの色: 千束 #f0555a、たきな #2a96fa、
+        # ミズキ #00b4aa、クルミ #ffe76c、ミカ #7a5668。端末の文字になる色は、
+        # 地の上で読めるように濃さを変えてある。
+        xdg.configFile."herdr-app/themes/lycoreco-chisato.json".source = ./themes/lycoreco-chisato.json;
+        xdg.configFile."herdr-app/themes/lycoreco-takina.json".source = ./themes/lycoreco-takina.json;
+
+        # settings.json は app も書く (zoom、音、Settings での変更) ので、
+        # 丸ごとは置けない。nix で決める項目だけを上書きして、他は残す。
+        # 中身が変わらない時は触らない (書くたびに app が読み直す)。
+        # Settings の theme picker で選んだ物は layout の側に残り、ここより
+        # 優先される。
+        home.activation.setHerdrAppSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+          settings="${config.xdg.configHome}/herdr-app/settings.json"
+          current='{}'
+          if [ -e "$settings" ]; then
+            current=$(${pkgs.coreutils}/bin/cat "$settings")
           fi
-        else
-          echo "herdr-app: $settings を JSON として読めないので、theme と font を書き込まなかった" >&2
-        fi
-      '';
+          if merged=$(${pkgs.jq}/bin/jq --argjson declared ${lib.escapeShellArg (builtins.toJSON settings)} '. + $declared' <<<"$current"); then
+            if [ "$merged" != "$(${pkgs.jq}/bin/jq . <<<"$current")" ]; then
+              # /dev/stdin からは install できない: macOS では stat した
+              # /dev/stdin (devfs) と開いた fd の inode が食い違い、coreutils が
+              # "replaced while being copied" として中止する。一時ファイルを経由する。
+              tmp=$(${pkgs.coreutils}/bin/mktemp)
+              printf '%s\n' "$merged" >"$tmp"
+              run ${pkgs.coreutils}/bin/install -Dm644 "$tmp" "$settings"
+              ${pkgs.coreutils}/bin/rm -f "$tmp"
+            fi
+          else
+            echo "herdr-app: $settings を JSON として読めないので、theme と font を書き込まなかった" >&2
+          fi
+        '';
 
-      xdg.configFile."herdr-app/keys.json".text = builtins.toJSON (
-        defaults
-        // {
-          global =
-            defaults.global
-            // lib.mapAttrs' (key: action: lib.nameValuePair "${prefix} ${key}" action) prefixed;
-        }
-      );
+        xdg.configFile."herdr-app/keys.json".text = builtins.toJSON (
+          defaults
+          // {
+            global =
+              defaults.global
+              // lib.mapAttrs' (key: action: lib.nameValuePair "${prefix} ${key}" action) prefixed;
+          }
+        );
+      };
     };
 }

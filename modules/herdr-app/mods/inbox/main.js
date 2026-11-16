@@ -1,12 +1,17 @@
 // 自分の手を待っている物を 1 か所に並べる右 panel
 // 許可や返事を待っている agent、見ていない間に終わった agent、自分の branch の pull request で落ちた CI、自分宛の review 依頼
 // agent の状態は app の live data から、GitHub の事は gh から取る。gh は開いている間ずっと数分おきに呼ぶ
+// Slack の依頼と standup の下書きは、常駐機の work-digest の API から読む (modules/work-digest)。URL が決まっている machine でだけ出す
 // 件数は shared の "inbox.count" に、pull request の状態は "inbox.github" に置く (tab bar のボタンと tasks mod が読む)
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, agents, exec, hc, run, theme, shared, setShared } from "herdr";
+// work-digest の API の URL。使わない machine では null (nix が書く: ../../herdr-app.nix)
+import { WORK_DIGEST } from "./env.js";
 
 const TICK = 60000, PULLS = 3 * 60000, REVIEWS = 5 * 60000, MAX_REPOS = 12;
+// sweep や下書きが走っている間は、終わるのを早めに見に行く
+const DIGEST = 60000, DIGEST_BUSY = 10000;
 const FAILED = new Set(["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
 const TRUNK = new Set(["main", "master", "develop", "trunk"]);
 
@@ -48,6 +53,72 @@ export default class Inbox extends View {
     this.busy = false; this.pulledAt = 0; this.reviewedAt = 0;
     cx.timer.every(TICK, cx => this.tick(cx));
     this.tick(cx);
+    // digest の null は取っている途中か、使わない machine の印
+    this.digest = null; this.digestError = null; this.digestAt = 0; this.asking = false;
+    if (WORK_DIGEST) {
+      cx.timer.every(DIGEST_BUSY, cx => {
+        const busy = this.digest?.slack.running || this.digest?.standup.running;
+        if (busy || Date.now() - this.digestAt >= DIGEST) this.ask(cx);
+      });
+      this.ask(cx);
+    }
+  }
+
+  // work-digest に聞く。path が無ければ状態を読むだけ。状態を変える call は、変えた後の状態か、始めた事だけを返す
+  ask(cx, path, body) {
+    if (this.asking && !path) return;
+    this.asking = true;
+    cx.spawn(async cx => {
+      try {
+        if (path) {
+          const r = await fetch(`${WORK_DIGEST}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
+          if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `work-digest answered ${r.status}`);
+        }
+        const r = await fetch(`${WORK_DIGEST}/state`);
+        if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `work-digest answered ${r.status}`);
+        this.digest = await r.json(); this.digestError = null;
+      } catch (e) { this.digestError = String(e?.message ?? e); }
+      finally { this.asking = false; this.digestAt = Date.now(); cx.notify(); }
+    });
+  }
+
+  chip(t, id, label, action) {
+    return div().id(id).flex_none().px(7).h(20).flex().items_center().rounded(5).border_1().border_color(t.border).text_size(11).text_color(t.muted).cursor_pointer()
+      .hover(s => s.bg(t.hover).text_color(t.foreground))
+      .on_click((_e, cx) => { cx.stop_propagation(); action(cx); }).child(label);
+  }
+
+  // Slack の依頼と FYI。click で Slack の message を開く。Done は片付けた、Skip は見送る、Seen は FYI を読んだ印
+  slack(t, item) {
+    const ask = item.kind === "ask", ids = [item.permalink];
+    return v_flex().id(`in-s-${item.permalink}`).px(10).py(8).gap(5).rounded(8).border_1().border_color(item.urgent ? t.blocked : t.border).bg(t.raised).cursor_pointer()
+      .hover(s => s.border_color(t.accent)).on_click((_e, cx) => cx.open_url(item.permalink))
+      .child(h_flex().gap(8).items_center()
+        .child(div().size(8).flex_none().rounded(4).bg(item.urgent ? t.blocked : ask ? t.accent : t.dim))
+        .child(div().flex_1().min_w(0).truncate().font_medium().child(item.from))
+        .child(div().flex_none().max_w(140).truncate().text_size(11).text_color(t.dim).child(item.channel)))
+      .child(div().text_size(12).text_color(t.muted).child(item.text))
+      .child(h_flex().gap(6).items_center()
+        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(item.due ? t.working : t.dim).child(item.due || ago(item.at)))
+        .when(ask, el => el.child(this.chip(t, `in-s-done-${item.permalink}`, "Done", cx => this.ask(cx, "/slack/items", { op: "tick", ids })))
+          .child(this.chip(t, `in-s-skip-${item.permalink}`, "Skip", cx => this.ask(cx, "/slack/items", { op: "skip", ids }))))
+        .when(!ask, el => el.child(this.chip(t, `in-s-seen-${item.permalink}`, "Seen", cx => this.ask(cx, "/slack/items", { op: "skip", ids })))));
+  }
+
+  // standup の下書き。Copy は Slack 等にそのまま貼れる箇条書きで clipboard に入れる
+  standup(t, d) {
+    const text = d.bullets.map(b => `- ${b}`).join("\n");
+    return v_flex().flex_none().px(12).py(10).gap(6).border_t(1).border_color(t.border).bg(t.chrome)
+      .child(h_flex().gap(6).items_center()
+        .child(div().flex_1().min_w(0).truncate().text_size(11).font_semibold().text_color(t.muted)
+          .child(`Standup${d.day ? ` · ${d.label} ${d.day}` : ""}${d.running ? " · writing…" : d.writtenAt ? ` · ${ago(d.writtenAt)}` : ""}`))
+        .when(Boolean(d.bullets.length), el => el.child(this.chip(t, "in-su-copy", this.copied === text ? "Copied" : "Copy", cx => { cx.write_to_clipboard(text); this.copied = text; cx.notify(); })))
+        .when(!d.running, el => el.child(this.chip(t, "in-su-write", "Write now", cx => this.ask(cx, "/standup/write")))))
+      .when(Boolean(d.error), el => el.child(div().text_size(11).text_color(t.blocked).child(d.error)))
+      .child(d.bullets.length
+        ? v_flex().id("in-su-body").max_h(200).overflow_y_scrollbar().gap(3).children(d.bullets.map(b => h_flex().gap(6).items_start().text_size(12)
+          .child(div().flex_none().text_color(t.dim).child("•")).child(div().flex_1().min_w(0).child(b))))
+        : div().text_size(12).text_color(t.dim).child(d.running ? "" : "No draft yet"));
   }
 
   tick(cx, now) {
@@ -129,13 +200,16 @@ export default class Inbox extends View {
     const name = a => (a.title ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").trim() || a.program?.name || "agent";
     const where = a => `${a.space_name} · ${a.tab_name}`;
     const failing = (shared("inbox.github")?.prs ?? []).filter(pr => pr.ci === "fail");
-    const count = blocked.length + done.length + failing.length + this.reviews.length;
+    const sl = this.digest?.slack, order = i => (i.urgent ? 0 : i.kind === "ask" ? 1 : 2);
+    const asks = (sl?.items ?? []).filter(i => !i.ticked).sort((a, b) => order(a) - order(b) || b.at - a.at);
+    const count = blocked.length + done.length + failing.length + this.reviews.length + asks.filter(i => i.kind === "ask").length;
     if (count !== (shared("inbox.count") ?? 0)) setShared("inbox.count", count);
     const cards = [
       ...this.section(t, "Needs you", blocked.map(a => this.card(t, `in-b-${a.address}`, t.blocked, name(a), where(a), this.snips[a.address] || null,
         () => run("agent.focus", { terminal: a.address })))),
       ...this.section(t, "Finished", done.map(a => this.card(t, `in-d-${a.address}`, t.done, name(a), where(a), null,
         () => run("agent.focus", { terminal: a.address })))),
+      ...this.section(t, "Slack", asks.map(item => this.slack(t, item))),
       ...this.section(t, "CI failed", failing.map(pr => this.card(t, `in-c-${pr.number}-${pr.branch}`, t.ansi1, `#${pr.number} ${pr.title}`, pr.branch,
         pr.failed.map(c => c.name).join(" · "), (_e, cx) => cx.open_url(pr.failed.find(c => c.url)?.url ?? pr.url)))),
       ...this.section(t, "Review requested", this.reviews.map(pr => this.card(t, `in-r-${pr.url}`, t.accent, `#${pr.number} ${pr.title}`, ago(Date.parse(pr.updatedAt)),
@@ -145,12 +219,16 @@ export default class Inbox extends View {
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .child(svg("mods/inbox/inbox.svg").size(14).text_color(t.muted))
         .child(div().font_semibold().child("Inbox"))
-        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(this.error ?? ""))
+        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(this.error ?? this.digestError ?? (sl && !sl.connected ? "Slack connector is not signed in" : sl?.error) ?? ""))
+        .when(Boolean(WORK_DIGEST), el => el.child(div().id("in-sweep").flex_none().px(6).h(22).flex().items_center().rounded(5).text_size(11).text_color(t.dim).cursor_pointer()
+          .hover(s => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => this.ask(cx, "/slack/sweep"))
+          .child(sl?.running ? "sweeping…" : sl?.lastAt ? `Slack ${ago(sl.lastAt)}` : "Slack")))
         .child(div().id("in-reload").flex_none().px(6).h(22).flex().items_center().rounded(5).text_size(11).text_color(t.dim).cursor_pointer()
           .hover(s => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => this.tick(cx, true))
           .child(this.busy ? "checking…" : this.pulledAt ? `GitHub ${ago(this.pulledAt)}` : "GitHub")))
       .child(cards.length
         ? v_flex().id("in-body").flex_1().min_h(0).overflow_y_scrollbar().px(12).pb(12).pt(6).gap(6).children(cards)
-        : div().p(16).text_color(t.dim).child("Nothing needs you"));
+        : div().flex_1().p(16).text_color(t.dim).child("Nothing needs you"))
+      .when(Boolean(this.digest), el => el.child(this.standup(t, this.digest.standup)));
   }
 }
