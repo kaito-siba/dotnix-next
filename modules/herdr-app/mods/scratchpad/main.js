@@ -16,13 +16,14 @@ const COPIES = "scratchpad/preview";
 const MAX_PICTURE = 16 * 1024 * 1024;
 
 // Claude Code は起動した folder の名前で scratchpad を作るので、pane が下の階層に居ても見つかるよう親へ遡る
-// 引数は folder、走査する範囲 (out か all)、all の時に返す件数、session id (空なら全 session)、all の時の filter の語 (glob を escape 済み)
+// session が分かっていれば、その id で探した scratchpad の folder の名前を使う。EnterWorktree した session は、起動した folder の名前の下に scratchpad を残して worktree へ移る
+// 引数は folder、走査する範囲 (out か all)、all の時に返す件数、絞り込む session id (空なら全 session)、folder の名前を決める session id (空なら folder から遡る)、all の時の filter の語 (glob を escape 済み)
 // 範囲が out なら直下と out/ だけを見る。scratchpad には clone した repository 等で数万ファイルが入り得るので、全体は all の時だけ走査し、filter と件数の絞り込みもこちらで済ませる
 // 出力は "mtime\tsize\tpath\0" の繰り返し
 // find の -printf は GNU 専用で、macOS の find (BSD) には無い。その時は stat に同じ形で書かせる。macOS でも stat だけ GNU の事があるので、stat の種類も見る
 const LIST = `
-d=$1 mode=$2 max=$3 sid=$4
-shift 4
+d=$1 mode=$2 max=$3 sid=$4 home=$5
+shift 5
 tmp=\${CLAUDE_CODE_TMPDIR:-/tmp}
 if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then
   files() { find "$@" -printf '%T@\\t%s\\t%p\\0' 2>/dev/null; }
@@ -31,11 +32,19 @@ elif stat -c %Y / >/dev/null 2>&1; then
 else
   files() { find "$@" -print0 2>/dev/null | xargs -0 stat -f '%m%t%z%t%N' 2>/dev/null | tr '\\n' '\\0'; }
 fi
-while :; do
+slug=
+if [ -n "$home" ]; then
+  for s in "$tmp"/claude-*/*/"$home"/scratchpad; do
+    [ -d "$s" ] || continue
+    s=\${s%/*/scratchpad}; slug=\${s##*/}; break
+  done
+fi
+while [ -z "$slug" ]; do
   slug=$(printf %s "$d" | sed 's/[^A-Za-z0-9]/-/g')
   for s in "$tmp"/claude-*/"$slug"/*/scratchpad; do
     [ -d "$s" ] && break 2
   done
+  slug=
   [ "$d" = / ] && exit 0
   d=\${d%/*}
   [ -z "$d" ] && d=/
@@ -219,7 +228,7 @@ export default class Scratchpad extends View {
     this.busy[part] = true;
     const only = this.only(), gen = this.gen, local = part === "local";
     const terms = this.all ? this.terms().map(term => term.replace(/[\\*?[\]]/g, "\\$&")) : [];
-    const args = ["-c", LIST, "scratchpad", only?.cwd ?? this.loc.cwd, this.all ? "all" : "out", String(MAX_FILES), only?.id ?? "", ...terms];
+    const args = ["-c", LIST, "scratchpad", only?.cwd ?? this.loc.cwd, this.all ? "all" : "out", String(MAX_FILES), only?.id ?? "", this.scope?.id ?? "", ...terms];
     cx.spawn(async cx => {
       try {
         this.found[part] = await (local ? this.local(args) : this.inside(args));
