@@ -67,7 +67,7 @@ runCommand "herdr-app-show"
     install -m644 ${./show/send.svg} $out/mods/show/send.svg
     install -m644 ${env} $out/mods/show/env.js
 
-    # layout: 右パネルの stack に show を足し、タブバーと Agents の一覧と sidebar
+    # layout: 右パネルの stack に show と inbox と tasks を足し、タブバーと Agents の一覧と sidebar
     # の頭と pane の header を写しに差し替える。sidebar の足 (Settings と Add machine) は外す:
     # どちらも key と palette から開ける。
     jq '
@@ -77,7 +77,7 @@ runCommand "herdr-app-show"
       | (.. | objects | select(.id? == "main") | .content.pane.header.content.mod) = "titled-pane"
       | (.. | objects | select(.id? == "sidebar") | .children) |= map(select(.id != "sidebar-footer"))
       | (.. | objects | select(.id? == "panel-body") | .children)
-          += [{id: "show", type: "block", content: {mod: "show"}}]
+          += (["show", "inbox", "tasks"] | map({id: ., type: "block", content: {mod: .}}))
     ' ${mainLayout} > $out/layouts/lycoreco.json
     jq -e '
       [.. | objects | select(.id? == "tabs") | .content.mod] == ["show-tabs"]
@@ -85,7 +85,7 @@ runCommand "herdr-app-show"
       and [.. | objects | select(.id? == "brand") | .content.mod] == ["bare-chrome"]
       and [.. | objects | select(.id? == "main") | .content.pane.header.content.mod] == ["titled-pane"]
       and ([.. | objects | select(.id? == "sidebar-footer")] | length == 0)
-      and ([.. | objects | select(.id? == "panel-body") | .children[].id] | index("show") != null)
+      and ([.. | objects | select(.id? == "panel-body") | .children[].id] | contains(["show", "inbox", "tasks"]))
     ' $out/layouts/lycoreco.json > /dev/null
 
     # sidebar の頭: logo と app の名前を出さない。場所は空けたままにして、検索と
@@ -118,15 +118,16 @@ runCommand "herdr-app-show"
     install -m644 ${./backdrop/backdrop.js} $out/mods/backdrop-agents/backdrop.js
     echo '{ "place": "none", "title": "Agents" }' > $out/mods/backdrop-agents/mod.json
 
-    # タブバー: Files / Changes の隣に Show のボタンを足す。開いていたパネル
-    # を space ごとに覚える処理にも show を通す。
+    # タブバー: Files / Changes の隣に Show と Inbox と Tasks のボタンを足す。
+    # 開いていたパネルを space ごとに覚える処理にもそれらを通す。Inbox のボタン
+    # には、inbox mod が shared に置く件数を添える。
     install -m644 ${tabsMod} $out/mods/show-tabs/main.js
     substituteInPlace $out/mods/show-tabs/main.js \
       --replace-fail \
         'enabled.includes(stored) ? stored : null' \
-        '(stored === "show" || enabled.includes(stored)) ? stored : null' \
+        '(["show", "inbox", "tasks"].includes(stored) || enabled.includes(stored)) ? stored : null' \
       --replace-fail \
         '.when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))' \
-        '.when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg"))).child(panelButton("show", "Show", "mods/show/show.svg"))'
+        '.when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg"))).child(panelButton("show", "Show", "mods/show/show.svg")).child(panelButton("inbox", shared("inbox.count") ? `Inbox ''${shared("inbox.count")}` : "Inbox", "mods/inbox/inbox.svg")).child(panelButton("tasks", "Tasks", "mods/tasks/tasks.svg"))'
     echo '{ "place": "none", "title": "Tabs" }' > $out/mods/show-tabs/mod.json
   ''
