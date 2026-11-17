@@ -4,10 +4,12 @@
   task-notes summarize   その裏の仕事 (hook が起動する)
 
 要約は $XDG_STATE_HOME/task-notes/<tab の id>.json に置き、herdr-app の tasks mod が読む。
-ファイルを書き換えた turn の後にだけ、Haiku を 1 回走らせて前の要約を更新する。
+最初の要約は、ファイルを書き換えた turn の後に作る。要約のある tab では、turn のたびに
+Haiku を 1 回走らせて前の要約を更新する (会話や command だけの turn でも step は進む)。
 herdr の端末の外 (HC_TERMINAL_ID が無い) では何もしない。
 """
 
+import fcntl
 import json
 import os
 import subprocess
@@ -20,6 +22,11 @@ MODEL = "haiku"
 STATE = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "task-notes"
 # summarize の中で走らせる claude も Stop hook を呼ぶ。この印で自分を呼び直さない
 GUARD = "TASK_NOTES_SUMMARY"
+# Haiku に渡す turn の文の上限 (文字数)
+BUDGET = 12000
+# そのうち、agent の最後の発言 (報告) に使う分
+REPORT = 3000
+CUT = "[…]"
 
 SCHEMA = {
     "type": "object",
@@ -54,7 +61,8 @@ Update the previous summary with the latest turn. Return the whole summary:
 - decisions: at most 8. kind decision = a choice the agent made; assumption = something it assumed without confirmation, worded so a reviewer knows what to check; you_said = the developer's own instruction or answer, briefly quoted.
 - notDone: at most 5: skipped tests, TODOs, open questions, risks.
 - planFile: the plan file's path if one was written, else empty.
-Plain words, each item under 140 characters. Write in the language the developer writes in. Never invent."""
+Plain words, each item under 140 characters. Write in the language the developer writes in. Never invent.
+The latest turn is abridged: "[…]" marks where text was cut here. Cut text is not unfinished work."""
 
 
 def run(cmd, cwd=None):
@@ -110,16 +118,18 @@ def last_turn(transcript):
     return messages[max(start, 0):]
 
 
-def digest(turn):
-    out, edits, plans, commands = [], [], [], set()
-    budget = 9000
+def clip(text, limit):
+    return text if len(text) <= limit else f"{text[:limit]} {CUT}"
 
-    def add(s):
-        nonlocal budget
-        if budget > 0:
-            out.append(s[:budget])
-            budget -= len(s)
 
+def digest(turn, report=""):
+    """turn を Haiku に渡す文にする。長い turn では、古い tool の記録から落とす。
+
+    report は hook が受け取った agent の最後の発言。Stop hook が走る時、それが
+    transcript にまだ書かれていない事があるので、無ければ足す。
+    """
+    # items は (kind, text)。person と agent は発言そのまま、tool は出す行
+    items, edits, plans, commands = [], [], [], set()
     for o in turn:
         content = o["message"].get("content")
         if isinstance(content, str):
@@ -127,8 +137,7 @@ def digest(turn):
         for c in content or []:
             kind = c.get("type")
             if kind == "text" and c.get("text", "").strip():
-                person = o["type"] == "user"
-                add(f"{'PERSON' if person else 'AGENT'}: {c['text'].strip()[:1500 if person else 700]}")
+                items.append(("person" if o["type"] == "user" else "agent", c["text"].strip()))
             elif kind == "tool_use":
                 i = c.get("input") or {}
                 path = i.get("file_path") or i.get("notebook_path")
@@ -137,17 +146,38 @@ def digest(turn):
                 if path and "/.claude/plans/" in path:
                     plans.append(path)
                 if c.get("name") == "ExitPlanMode" and i.get("plan"):
-                    add(f"PLAN: {str(i['plan'])[:1500]}")
+                    items.append(("tool", f"PLAN: {clip(str(i['plan']), 1500)}"))
                 what = i.get("command") or path or i.get("pattern") or i.get("description") or ""
-                add(f"TOOL {c.get('name')}" + (f": {str(what)[:160]}" if what else ""))
+                items.append(("tool", f"TOOL {c.get('name')}" + (f": {str(what)[:160]}" if what else "")))
                 if c.get("name") == "Bash":
                     commands.add(c.get("id"))
             elif kind == "tool_result" and c.get("tool_use_id") in commands:
                 # command の結果。通った test や check を「確認済み」と数えられるように
                 body = c.get("content")
                 text = body if isinstance(body, str) else "\n".join(x.get("text", "") for x in body or [])
-                add(f"RESULT {'(failed)' if c.get('is_error') else '(ok)'}: {text.strip()[-240:]}")
-    return "\n".join(out), edits, plans
+                # 末尾だけを取る。切った印は付けない: 付けると「出力が途中で切れた」と要約される
+                items.append(("tool", f"RESULT {'(failed)' if c.get('is_error') else '(ok)'}: {text.strip()[-240:]}"))
+    if report and not any(kind == "agent" and text.startswith(report) for kind, text in items):
+        items.append(("agent", report))
+
+    def line(n, limit):
+        kind, text = items[n]
+        return text if kind == "tool" else f"{kind.upper()}: {clip(text, limit)}"
+
+    # 人の発言と agent の最後の発言 (報告) を先に取り、残りの枠を新しい方から埋める。
+    # 先頭から埋めると、長い turn では結論の書いてある最後の報告が落ちる
+    last = max((n for n, (kind, _) in enumerate(items) if kind == "agent"), default=None)
+    lines = {n: line(n, 1500 if kind == "person" else REPORT) for n, (kind, _) in enumerate(items) if kind == "person" or n == last}
+    budget = BUDGET - sum(map(len, lines.values()))
+    for n in reversed(range(len(items))):
+        if n in lines:
+            continue
+        if len(line(n, 700)) > budget:
+            lines[n] = f"{CUT} (earlier entries left out)"
+            break
+        lines[n] = line(n, 700)
+        budget -= len(lines[n])
+    return "\n".join(lines[n] for n in sorted(lines)), edits, plans
 
 
 def hook():
@@ -158,9 +188,12 @@ def hook():
     transcript = h.get("transcript_path")
     if not transcript or not os.path.exists(transcript):
         return
-    if not digest(last_turn(transcript))[1]:
-        return
-    job = json.dumps({"transcript": transcript, "cwd": h.get("cwd") or os.getcwd(), "terminal": terminal})
+    # 要約するかは裏で決める: transcript を読むのも、tab を調べるのも時間がかかる
+    job = json.dumps({
+        "transcript": transcript, "cwd": h.get("cwd") or os.getcwd(), "terminal": terminal,
+        # 引数で渡すので、digest が使う長さまでにしておく
+        "report": (h.get("last_assistant_message") or "").strip()[:REPORT],
+    })
     subprocess.Popen(
         [sys.executable, __file__, "summarize", job],
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -174,13 +207,16 @@ def summarize(job):
     if not at:
         return
     out = STATE / f"{at['tab']}.json"
-    lock = out.with_suffix(".lock")
-    if lock.exists() and time.time() - lock.stat().st_mtime < 300:
-        return
-    write_atomic(lock, str(os.getpid()))
-    try:
+    # 待つ前に読む: 待っている間に次の turn が始まると、最後の turn が入れ替わる
+    text, edits, plans = digest(last_turn(job["transcript"]), job.get("report") or "")
+    # 前の turn の要約がまだ走っていたら、終わるのを待つ。飛ばすと、すぐ後に
+    # 終わった turn (短い返事など) が要約に入らない
+    STATE.mkdir(parents=True, exist_ok=True)
+    with open(out.with_suffix(".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
         prev = read_json(out)
-        text, _edits, plans = digest(last_turn(job["transcript"]))
+        if not prev and not edits:
+            return
         kept = {k: prev.get(k) for k in ("goal", "planFile", "steps", "decisions", "notDone")} if prev else None
         prompt = "\n".join([
             INSTRUCTIONS,
@@ -211,8 +247,6 @@ def summarize(job):
             "branch": run(["git", "branch", "--show-current"], job["cwd"]),
             "turns": (prev or {}).get("turns", 0) + 1, "updatedAt": int(time.time() * 1000),
         }, ensure_ascii=False, indent=2))
-    finally:
-        lock.unlink(missing_ok=True)
 
 
 def main():

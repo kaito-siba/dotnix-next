@@ -10,6 +10,9 @@
   jq,
   # 同梱の layout / mod を写す元の tag。_package.nix の version と揃える。
   appVersion,
+  # inbox (./mods/inbox) が Slack の依頼と standup の下書きを読む、work-digest の
+  # API の URL。無ければ null。
+  workDigestUrl ? null,
 }:
 let
   # Show パネルに物を置き、注釈を焼き込むコマンド。mod からも端末からも
@@ -51,6 +54,12 @@ let
   env = writeText "herdr-show-env.js" ''
     export const SHOW = "${lib.getExe show}";
   '';
+
+  # mod は nix の設定を知らないので、module として渡す。inbox と、その中身を
+  # 取りに行く show-tabs の両方に置く。
+  inboxEnv = writeText "herdr-inbox-env.js" ''
+    export const WORK_DIGEST = ${builtins.toJSON workDigestUrl};
+  '';
 in
 # ~/.config/herdr-app にそのまま重ねる木。
 runCommand "herdr-app-show"
@@ -59,7 +68,7 @@ runCommand "herdr-app-show"
     passthru = { inherit show; };
   }
   ''
-    mkdir -p $out/layouts $out/mods/show $out/mods/show-tabs $out/mods/backdrop-agents $out/mods/bare-chrome $out/mods/titled-pane
+    mkdir -p $out/layouts $out/mods/show $out/mods/inbox $out/mods/explorer $out/mods/sandbox $out/mods/show-tabs $out/mods/backdrop-agents $out/mods/bare-chrome $out/mods/titled-pane
 
     install -m644 ${./show/main.js} $out/mods/show/main.js
     install -m644 ${./show/mod.json} $out/mods/show/mod.json
@@ -67,7 +76,26 @@ runCommand "herdr-app-show"
     install -m644 ${./show/send.svg} $out/mods/show/send.svg
     install -m644 ${env} $out/mods/show/env.js
 
-    # layout: 右パネルの stack に show と inbox と tasks を足し、タブバーと Agents の一覧と sidebar
+    # Inbox: 自分の手を待っている物を並べるモーダル。mod が import する module
+    # (feed.js と env.js) は link では置けない: app は mod の folder の外へ辿り着く
+    # import を読まない。なので mod ごと、コピーされるこの木に入れる。
+    install -m644 ${./mods/inbox/main.js} $out/mods/inbox/main.js
+    install -m644 ${./mods/inbox/feed.js} $out/mods/inbox/feed.js
+    install -m644 ${./mods/inbox/mod.json} $out/mods/inbox/mod.json
+    install -m644 ${./mods/inbox/inbox.svg} $out/mods/inbox/inbox.svg
+    install -m644 ${inboxEnv} $out/mods/inbox/env.js
+
+    # Files: focus している pane の folder から file を辿る dialog (explorer) と、
+    # sbx の sandbox を見る dialog (sandbox)。file を辿る所 (browser.js) は同じ物
+    # を使う。import する module は link では置けないので、こちらも mod ごと入れる。
+    install -m644 ${./mods/explorer/main.js} $out/mods/explorer/main.js
+    install -m644 ${./mods/explorer/browser.js} $out/mods/explorer/browser.js
+    install -m644 ${./mods/explorer/mod.json} $out/mods/explorer/mod.json
+    install -m644 ${./mods/sandbox/main.js} $out/mods/sandbox/main.js
+    install -m644 ${./mods/explorer/browser.js} $out/mods/sandbox/browser.js
+    install -m644 ${./mods/sandbox/mod.json} $out/mods/sandbox/mod.json
+
+    # layout: 右パネルの stack から files を外して (explorer で見る) show と tasks を足し、タブバーと Agents の一覧と sidebar
     # の頭と pane の header を写しに差し替える。sidebar の足 (Settings と Add machine) は外す:
     # どちらも key と palette から開ける。
     jq '
@@ -76,8 +104,8 @@ runCommand "herdr-app-show"
       | (.. | objects | select(.id? == "brand") | .content.mod) = "bare-chrome"
       | (.. | objects | select(.id? == "main") | .content.pane.header.content.mod) = "titled-pane"
       | (.. | objects | select(.id? == "sidebar") | .children) |= map(select(.id != "sidebar-footer"))
-      | (.. | objects | select(.id? == "panel-body") | .children)
-          += (["show", "inbox", "tasks"] | map({id: ., type: "block", content: {mod: .}}))
+      | (.. | objects | select(.id? == "panel-body"))
+          |= (.active = "changes" | .children |= map(select(.id != "files")) + (["show", "tasks"] | map({id: ., type: "block", content: {mod: .}})))
     ' ${mainLayout} > $out/layouts/lycoreco.json
     jq -e '
       [.. | objects | select(.id? == "tabs") | .content.mod] == ["show-tabs"]
@@ -85,7 +113,8 @@ runCommand "herdr-app-show"
       and [.. | objects | select(.id? == "brand") | .content.mod] == ["bare-chrome"]
       and [.. | objects | select(.id? == "main") | .content.pane.header.content.mod] == ["titled-pane"]
       and ([.. | objects | select(.id? == "sidebar-footer")] | length == 0)
-      and ([.. | objects | select(.id? == "panel-body") | .children[].id] | contains(["show", "inbox", "tasks"]))
+      and [.. | objects | select(.id? == "panel-body") | .children[].id] == ["changes", "show", "tasks"]
+      and [.. | objects | select(.id? == "panel-body") | .active] == ["changes"]
     ' $out/layouts/lycoreco.json > /dev/null
 
     # sidebar の頭: logo と app の名前を出さない。場所は空けたままにして、検索と
@@ -118,16 +147,25 @@ runCommand "herdr-app-show"
     install -m644 ${./backdrop/backdrop.js} $out/mods/backdrop-agents/backdrop.js
     echo '{ "place": "none", "title": "Agents" }' > $out/mods/backdrop-agents/mod.json
 
-    # タブバー: Files / Changes の隣に Show と Inbox と Tasks のボタンを足す。
-    # 開いていたパネルを space ごとに覚える処理にもそれらを通す。Inbox のボタン
-    # には、inbox mod が shared に置く件数を添える。
-    install -m644 ${tabsMod} $out/mods/show-tabs/main.js
+    # タブバー: Files のボタンを外し、Changes の隣に Show と Tasks のボタンを足す。
+    # 開いていたパネルを space ごとに覚える処理にもそれらを通す。その隣に Inbox を開く
+    # ボタンも足す。Inbox の中身を数分おきに取りに行くのもここ (./mods/inbox/feed.js):
+    # モーダルは開いている間しか生きていないので、いつも出ているタブバーに持たせる。
+    { echo 'import { start as startInbox, button as inboxButton } from "./inbox.js";'; cat ${tabsMod}; } > $out/mods/show-tabs/main.js
+    install -m644 ${./mods/inbox/feed.js} $out/mods/show-tabs/inbox.js
+    install -m644 ${inboxEnv} $out/mods/show-tabs/env.js
     substituteInPlace $out/mods/show-tabs/main.js \
       --replace-fail \
+        'init() {' \
+        'init(_props, cx) { startInbox(cx);' \
+      --replace-fail \
+        'const enabled = shared("workspace.panels") ?? ["files", "changes"];' \
+        'const enabled = (shared("workspace.panels") ?? ["changes"]).filter(p => p !== "files");' \
+      --replace-fail \
         'enabled.includes(stored) ? stored : null' \
-        '(["show", "inbox", "tasks"].includes(stored) || enabled.includes(stored)) ? stored : null' \
+        '(["show", "tasks"].includes(stored) || enabled.includes(stored)) ? stored : null' \
       --replace-fail \
         '.when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))' \
-        '.when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg"))).child(panelButton("show", "Show", "mods/show/show.svg")).child(panelButton("inbox", shared("inbox.count") ? `Inbox ''${shared("inbox.count")}` : "Inbox", "mods/inbox/inbox.svg")).child(panelButton("tasks", "Tasks", "mods/tasks/tasks.svg"))'
+        '.when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg"))).child(panelButton("show", "Show", "mods/show/show.svg")).child(panelButton("tasks", "Tasks", "mods/tasks/tasks.svg")).child(inboxButton(t))'
     echo '{ "place": "none", "title": "Tabs" }' > $out/mods/show-tabs/mod.json
   ''

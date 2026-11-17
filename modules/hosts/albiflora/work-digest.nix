@@ -4,6 +4,9 @@
   flake.modules.nixos."hosts/albiflora" = {
     work-digest.user = "w963n";
 
-    home-manager.users.w963n.work-digest.allowedNodes = [ "incarnata" ];
+    home-manager.users.w963n = {
+      work-digest.allowedNodes = [ "incarnata" ];
+      herdr-app.workDigestUrl = "http://127.0.0.1:8792";
+    };
   };
 }

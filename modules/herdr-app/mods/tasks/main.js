@@ -1,7 +1,7 @@
 // 表示している space の tab ごとに、そこの agent が何をしているかを出す右 panel
 // goal、plan、判断と仮定、残っている事は、task-notes が turn の後に書く要約から (../task-notes)。変更と commit は git から出す
 // 要約は agent の動く machine の $XDG_STATE_HOME/task-notes/<tab の id>.json にある
-import { View, div, svg } from "gpui-kit";
+import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, agents, shared, theme, run, exec, layout } from "herdr";
 
@@ -20,6 +20,15 @@ git diff --numstat "$base" 2>/dev/null
 # git がまだ追っていない新しいファイルも数える。全ての行が追加に当たる
 git ls-files --others --exclude-standard -z 2>/dev/null | xargs -0 wc -l 2>/dev/null | grep -v ' total$' | awk '{ n=$1; $1=""; sub(/^ /, ""); print n "\\t0\\t" $0 }'
 `;
+
+// agent が title の前に付ける状態の印 ("✳ ", "⠋ - ") を落とす
+const clean = s => (s ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").trim();
+
+// navigator と同じ呼び方: agent は自分で付けた title (Claude Code なら session の名前) で、他は動いている program の名前で呼ぶ
+function label(p) {
+  const told = p.program?.agent ? clean(p.title) : "";
+  return told || p.program?.name || p.title || "shell";
+}
 
 function ago(ms) {
   const m = Math.floor((Date.now() - ms) / 60000);
@@ -56,7 +65,7 @@ export default class Tasks extends View {
       if (!pane) continue;
       // 他の machine の id には "<machine>/" が前に付く。その machine の上では付かない
       const key = space.machine ? tab.id.slice(space.machine.length + 1) : tab.id;
-      list.push({ id: tab.id, key, tab, cwd: pane.cwd, branch: pane.branch, on: space.machine, agent: agents().find(a => a.tab === tab.id) });
+      list.push({ id: tab.id, key, tab, name: label(pane), program: pane.program, cwd: pane.cwd, branch: pane.branch, on: space.machine, agent: agents().find(a => a.tab === tab.id) });
     }
     return { space, list };
   }
@@ -98,17 +107,20 @@ export default class Tasks extends View {
       .when(Boolean(right), el => el.child(div().flex_1()).child(right));
     const dot = status => status === "working" ? div().size(9).flex_none().rounded(5).border_2().border_color(t.working)
       : div().size(8).flex_none().rounded(4).bg(status ? t[status] : t.dim);
+    const pic = prog => !prog?.icon ? null : prog.tint ? svg(prog.icon).size(14).flex_none().text_color(t.muted) : image(prog.icon).w(14).h(14).flex_none();
+    // 幅が狭いので、navigator の行から cwd を除いた形にする。branch は選んだ task の見出しの下に出ている
     const row = x => h_flex().id(`tk-${x.id}`).px(8).py(6).gap(8).items_center().rounded(6).text_size(12.5).cursor_pointer()
       .when(x.id === this.selected, el => el.bg(t.selected)).hover(st => st.bg(t.hover))
       .on_click((_e, cx) => { this.selected = x.id; this.current = x; this.load(cx, true); cx.notify(); })
       .child(dot(x.tab.status))
-      .child(div().flex_1().min_w(0).truncate().child(x.tab.name))
-      .child(div().flex_none().max_w(160).truncate().text_size(11).text_color(t.dim).child(x.branch ?? ""));
+      .when(Boolean(pic(x.program)), el => el.child(pic(x.program)))
+      .child(div().flex_1().min_w(0).truncate().child(x.name))
+      .child(div().flex_none().max_w(140).truncate().text_size(11).text_color(t.dim).child(x.tab.name));
 
     const body = !task ? [div().text_color(t.dim).child(space ? "No terminals in this space" : "No space")] : [
       v_flex().gap(3)
-        .child(div().text_size(15).font_semibold().child(`${space.name} › ${task.tab.name}`))
-        .child(div().text_size(11).text_color(t.dim).child([task.branch, s?.updatedAt ? `updated ${ago(s.updatedAt)}` : ""].filter(Boolean).join(" · "))),
+        .child(div().text_size(15).font_semibold().child(task.name))
+        .child(div().text_size(11).text_color(t.dim).child([`${space.name} › ${task.tab.name}`, task.branch, s?.updatedAt ? `updated ${ago(s.updatedAt)}` : ""].filter(Boolean).join(" · "))),
       ...(task.agent?.status === "blocked" ? [h_flex().id("tk-open").p(10).gap(8).items_center().rounded(8).bg(t.raised).border_1().border_color(t.blocked).cursor_pointer()
         .on_click(() => run("agent.focus", { terminal: task.agent.address }))
         .child(div().flex_1().text_size(11).font_semibold().text_color(t.blocked).child("WAITING ON YOU"))
