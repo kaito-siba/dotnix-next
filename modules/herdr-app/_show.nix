@@ -10,6 +10,8 @@
   jq,
   # 同梱の layout / mod を写す元の tag。_package.nix の version と揃える。
   appVersion,
+  # inbox mod (./mods/inbox) に渡す work-digest の API の URL。無ければ null。
+  workDigestUrl ? null,
 }:
 let
   # Show パネルに物を置き、注釈を焼き込むコマンド。mod からも端末からも
@@ -51,6 +53,13 @@ let
   env = writeText "herdr-show-env.js" ''
     export const SHOW = "${lib.getExe show}";
   '';
+
+  # inbox mod の本体は herdr-app.nix が link で置くが、mod が import する module
+  # は link では置けない: app は mod の folder の外へ辿り着く import を読まない。
+  # なので nix の設定を渡す module だけ、コピーされるこの木に入れる。
+  inboxEnv = writeText "herdr-inbox-env.js" ''
+    export const WORK_DIGEST = ${builtins.toJSON workDigestUrl};
+  '';
 in
 # ~/.config/herdr-app にそのまま重ねる木。
 runCommand "herdr-app-show"
@@ -66,6 +75,8 @@ runCommand "herdr-app-show"
     install -m644 ${./show/show.svg} $out/mods/show/show.svg
     install -m644 ${./show/send.svg} $out/mods/show/send.svg
     install -m644 ${env} $out/mods/show/env.js
+
+    install -Dm644 ${inboxEnv} $out/mods/inbox/env.js
 
     # layout: 右パネルの stack に show と inbox と tasks を足し、タブバーと Agents の一覧と sidebar
     # の頭と pane の header を写しに差し替える。sidebar の足 (Settings と Add machine) は外す:

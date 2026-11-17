@@ -25,7 +25,10 @@ in
       # 組み立ては ./_show.nix。Show を足した layout (lycoreco) もここで作る。
       # Agents の一覧の下には絵を敷ける: 画像は repo に入れず、
       # ~/.config/herdr-app/backgrounds/sidebar.png に置く (./backdrop)。
-      show = pkgs.callPackage ./_show.nix { appVersion = herdr-app.version; };
+      show = pkgs.callPackage ./_show.nix {
+        appVersion = herdr-app.version;
+        workDigestUrl = cfg.workDigestUrl;
+      };
 
       # settings.json のうち nix で決める項目。theme は ./themes の名前で、
       # layout が自分の theme を持たない所で使われる。
@@ -132,7 +135,9 @@ in
         # なので実体をコピーする。中身が同じなら触らない (書くたびに mod が
         # reload される)。入れた後は一度 layout を切り替える:
         #   herdr-app do layout.switch --name lycoreco
-        home.activation.installHerdrAppShow = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        # link の張り替えの後に動かす: 前の世代が同じ場所に link を置いていると、
+        # 中身が同じに見えてコピーを飛ばし、その後で link だけが消される。
+        home.activation.installHerdrAppShow = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
           app_home="${config.xdg.configHome}/herdr-app"
           (
             cd ${show}
@@ -167,16 +172,13 @@ in
           source = ./mods/sandbox;
           recursive = true;
         };
-        # 右パネルの Inbox と Tasks。layout とタブバーへの組み込みは ./_show.nix、
-        # Tasks の出す要約を書く側は ./task-notes.nix。
+        # 右パネルの Inbox と Tasks。layout とタブバーへの組み込みと、inbox に
+        # workDigestUrl を渡す env.js は ./_show.nix、Tasks の出す要約を書く側は
+        # ./task-notes.nix。
         xdg.configFile."herdr-app/mods/inbox" = {
           source = ./mods/inbox;
           recursive = true;
         };
-        # mod は nix の設定を知らないので、module として渡す。
-        xdg.configFile."herdr-app/mods/inbox/env.js".text = ''
-          export const WORK_DIGEST = ${builtins.toJSON cfg.workDigestUrl};
-        '';
         xdg.configFile."herdr-app/mods/tasks" = {
           source = ./mods/tasks;
           recursive = true;
