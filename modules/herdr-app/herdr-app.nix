@@ -28,6 +28,7 @@ in
       show = pkgs.callPackage ./_show.nix {
         appVersion = herdr-app.version;
         workDigestUrl = cfg.workDigestUrl;
+        commitmentsUrl = cfg.commitmentsUrl;
       };
 
       # settings.json のうち nix で決める項目。theme は ./themes の名前で、
@@ -125,6 +126,13 @@ in
         default = null;
         example = "http://albiflora:8792";
         description = "Inbox に Slack の依頼と standup の下書きを出す時の、work-digest の API の URL (modules/work-digest)";
+      };
+
+      options.herdr-app.commitmentsUrl = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "http://albiflora:8793";
+        description = "Inbox に commitment (自分への約束) を出して状態を決める時の、aw-secretary serve の API の URL (kaito-siba/aw-secretary)";
       };
 
       config = {
