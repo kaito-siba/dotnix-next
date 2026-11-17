@@ -105,13 +105,13 @@ in
         "g g" = "mod.open:lazygit";
         "g p" = "mod.open:pr";
         # sbx の sandbox の中のファイル、port の公開、通信の許可、負荷を見る。
-        "shift-b" = "mod.open:sandbox";
+        "shift-s" = "mod.open:sandbox";
         # app に copy mode は無いので、選択を動かす command を使う mod で作る。
         "[" = "mod.open:copy-mode";
         # 自分の手を待っている物 (agent、Slack、CI、review 依頼) を並べる。
         "i" = "mod.open:inbox";
 
-        "shift-s" = "app.settings";
+        # settings は既定値の key (ctrl-,、macOS は cmd-,) で開く。
         "b" = "layout.toggle:sidebar";
         "?" = "app.help";
       }
