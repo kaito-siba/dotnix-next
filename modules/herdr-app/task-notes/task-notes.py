@@ -24,6 +24,8 @@ STATE = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") /
 GUARD = "TASK_NOTES_SUMMARY"
 # Haiku に渡す turn の文の上限 (文字数)
 BUDGET = 12000
+# そのうち、agent の最後の発言 (報告) に使う分
+REPORT = 3000
 CUT = "[…]"
 
 SCHEMA = {
@@ -116,14 +118,16 @@ def last_turn(transcript):
     return messages[max(start, 0):]
 
 
-def clip(text, limit, tail=False):
-    if len(text) <= limit:
-        return text
-    return f"{CUT} {text[-limit:]}" if tail else f"{text[:limit]} {CUT}"
+def clip(text, limit):
+    return text if len(text) <= limit else f"{text[:limit]} {CUT}"
 
 
-def digest(turn):
-    """turn を Haiku に渡す文にする。長い turn では、古い tool の記録から落とす。"""
+def digest(turn, report=""):
+    """turn を Haiku に渡す文にする。長い turn では、古い tool の記録から落とす。
+
+    report は hook が受け取った agent の最後の発言。Stop hook が走る時、それが
+    transcript にまだ書かれていない事があるので、無ければ足す。
+    """
     # items は (kind, text)。person と agent は発言そのまま、tool は出す行
     items, edits, plans, commands = [], [], [], set()
     for o in turn:
@@ -144,14 +148,17 @@ def digest(turn):
                 if c.get("name") == "ExitPlanMode" and i.get("plan"):
                     items.append(("tool", f"PLAN: {clip(str(i['plan']), 1500)}"))
                 what = i.get("command") or path or i.get("pattern") or i.get("description") or ""
-                items.append(("tool", f"TOOL {c.get('name')}" + (f": {clip(str(what), 160)}" if what else "")))
+                items.append(("tool", f"TOOL {c.get('name')}" + (f": {str(what)[:160]}" if what else "")))
                 if c.get("name") == "Bash":
                     commands.add(c.get("id"))
             elif kind == "tool_result" and c.get("tool_use_id") in commands:
                 # command の結果。通った test や check を「確認済み」と数えられるように
                 body = c.get("content")
                 text = body if isinstance(body, str) else "\n".join(x.get("text", "") for x in body or [])
-                items.append(("tool", f"RESULT {'(failed)' if c.get('is_error') else '(ok)'}: {clip(text.strip(), 240, tail=True)}"))
+                # 末尾だけを取る。切った印は付けない: 付けると「出力が途中で切れた」と要約される
+                items.append(("tool", f"RESULT {'(failed)' if c.get('is_error') else '(ok)'}: {text.strip()[-240:]}"))
+    if report and not any(kind == "agent" and text.startswith(report) for kind, text in items):
+        items.append(("agent", report))
 
     def line(n, limit):
         kind, text = items[n]
@@ -160,7 +167,7 @@ def digest(turn):
     # 人の発言と agent の最後の発言 (報告) を先に取り、残りの枠を新しい方から埋める。
     # 先頭から埋めると、長い turn では結論の書いてある最後の報告が落ちる
     last = max((n for n, (kind, _) in enumerate(items) if kind == "agent"), default=None)
-    lines = {n: line(n, 1500 if kind == "person" else 3000) for n, (kind, _) in enumerate(items) if kind == "person" or n == last}
+    lines = {n: line(n, 1500 if kind == "person" else REPORT) for n, (kind, _) in enumerate(items) if kind == "person" or n == last}
     budget = BUDGET - sum(map(len, lines.values()))
     for n in reversed(range(len(items))):
         if n in lines:
@@ -182,7 +189,11 @@ def hook():
     if not transcript or not os.path.exists(transcript):
         return
     # 要約するかは裏で決める: transcript を読むのも、tab を調べるのも時間がかかる
-    job = json.dumps({"transcript": transcript, "cwd": h.get("cwd") or os.getcwd(), "terminal": terminal})
+    job = json.dumps({
+        "transcript": transcript, "cwd": h.get("cwd") or os.getcwd(), "terminal": terminal,
+        # 引数で渡すので、digest が使う長さまでにしておく
+        "report": (h.get("last_assistant_message") or "").strip()[:REPORT],
+    })
     subprocess.Popen(
         [sys.executable, __file__, "summarize", job],
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -197,7 +208,7 @@ def summarize(job):
         return
     out = STATE / f"{at['tab']}.json"
     # 待つ前に読む: 待っている間に次の turn が始まると、最後の turn が入れ替わる
-    text, edits, plans = digest(last_turn(job["transcript"]))
+    text, edits, plans = digest(last_turn(job["transcript"]), job.get("report") or "")
     # 前の turn の要約がまだ走っていたら、終わるのを待つ。飛ばすと、すぐ後に
     # 終わった turn (短い返事など) が要約に入らない
     STATE.mkdir(parents=True, exist_ok=True)
