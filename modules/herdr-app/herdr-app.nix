@@ -108,6 +108,8 @@ in
         "shift-b" = "mod.open:sandbox";
         # app に copy mode は無いので、選択を動かす command を使う mod で作る。
         "[" = "mod.open:copy-mode";
+        # 自分の手を待っている物 (agent、Slack、CI、review 依頼) を並べる。
+        "i" = "mod.open:inbox";
 
         "shift-s" = "app.settings";
         "b" = "layout.toggle:sidebar";
@@ -172,13 +174,8 @@ in
           source = ./mods/sandbox;
           recursive = true;
         };
-        # 右パネルの Inbox と Tasks。layout とタブバーへの組み込みと、inbox に
-        # workDigestUrl を渡す env.js は ./_show.nix、Tasks の出す要約を書く側は
-        # ./task-notes.nix。
-        xdg.configFile."herdr-app/mods/inbox" = {
-          source = ./mods/inbox;
-          recursive = true;
-        };
+        # 右パネルの Tasks。layout とタブバーへの組み込みは ./_show.nix、出す要約を
+        # 書く側は ./task-notes.nix。Inbox (./mods/inbox) は ./_show.nix が置く。
         xdg.configFile."herdr-app/mods/tasks" = {
           source = ./mods/tasks;
           recursive = true;
