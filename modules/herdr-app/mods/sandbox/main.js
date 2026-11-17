@@ -64,7 +64,9 @@ function ago(ms) {
   if (s < 60) return "now";
   if (s < 3600) return `${Math.floor(s / 60)}m`;
   if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
+  // 出す所の幅は 3 文字ぶん。image に入っていた file は何年も前の日付を持つので、日数が 3 桁になる前に単位を上げる
+  const days = Math.floor(s / 86400);
+  return days < 100 ? `${days}d` : days < 365 ? `${Math.floor(days / 7)}w` : `${Math.floor(days / 365)}y`;
 }
 
 function bytes(n) {
@@ -509,7 +511,7 @@ export default class Sandbox extends View {
       else if (k === "h" || k === "left" || k === "backspace") this.leave(cx);
       else if (k === ".") { this.hidden = !this.hidden; this.sync(cx); }
       else if (k === "m") this.raw = !this.raw;
-      else if (k === "d" || k === "s") this.save(cx);
+      else if (k === "s") this.save(cx);
       else if (k === "y" && file) { cx.write_to_clipboard(file.path); notify({ title: "Sandbox", body: `Copied ${file.path}`, timeout: 2000 }); }
       else return;
     } else if (tab === "ports") {
@@ -684,7 +686,7 @@ export default class Sandbox extends View {
 
   hint() {
     const common = "1-4 view · [ ] sandbox · r reload · q close";
-    if (this.tab === "files") return `hjkl move · / filter · . hidden${this.markdown ? " · m raw" : ""} · d copy to host · y copy path · ${common}`;
+    if (this.tab === "files") return `hjkl move · / filter · . hidden${this.markdown ? " · m raw" : ""} · s save to host · y copy path ·${common}`;
     if (this.tab === "ports") return `j/k move · a publish · Enter open · y copy URL · d unpublish · ${common}`;
     if (this.tab === "network") return `j/k move · / search · a allow for this sandbox · A allow all listed · d dismiss / remove rule · ${common}`;
     return common;
