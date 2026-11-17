@@ -95,6 +95,12 @@ runCommand "herdr-app-show"
     install -m644 ${./mods/explorer/browser.js} $out/mods/sandbox/browser.js
     install -m644 ${./mods/sandbox/mod.json} $out/mods/sandbox/mod.json
 
+    # agent が今居る folder を task-notes に訊く所 (./task-notes/where.js)。link で置く
+    # mod (./herdr-app.nix) もこれを import するので、その folder にもこの木からコピーする。
+    for mod in explorer lazygit pr scratchpad tasks; do
+      install -Dm644 ${./task-notes/where.js} $out/mods/$mod/where.js
+    done
+
     # layout: 右パネルの stack から files を外して (explorer で見る) show と tasks を足し、タブバーと Agents の一覧と sidebar
     # の頭と pane の header を写しに差し替える。sidebar の足 (Settings と Add machine) は外す:
     # どちらも key と palette から開ける。

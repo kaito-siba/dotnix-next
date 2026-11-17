@@ -1,18 +1,19 @@
-// focus している pane の folder で lazygit を起動し、peek (端末を tab の上に重ねて出す herdr の dialog) で見せる
+// focus している pane の agent が今居る folder (agent が居なければ pane の folder) で lazygit を起動し、peek (端末を tab の上に重ねて出す herdr の dialog) で見せる
+// sbx の sandbox の中の agent でも、lazygit は host で動かす。workspace は同じ path で mount されているが、中では .git/config が read-only
 // key から呼べるのは mod.open だけなので、この mod は lazygit を起動して peek を開いたら自分は閉じる launcher
 // 端末を載せた dialog を openOverlay で自分で開く事もできるが、その端末には click するまで key が入らず、mod から focus を当てる手段も無い
 import { View, div } from "gpui-kit";
-import { spaces, panes, focused, terminals, hc, run, notify, props, closeOverlay } from "herdr";
+import { terminals, hc, run, notify, props, closeOverlay } from "herdr";
+import { location, where } from "./where.js";
 
 // 端末の名前は live の間ひとつしか付けられない。これで二重に起動するのを防ぐ
 const NAME = "lazygit";
 
 export default class Lazygit extends View {
   init(_props, cx) {
-    const space = spaces().find(s => s.active), f = focused();
-    const pane = f?.pane ? panes().find(p => p.pane === f.pane) : null;
-    const cwd = pane?.cwd || f?.cwd || space?.folder, on = space?.machine ?? null;
+    const here = location();
     cx.spawn(async cx => {
+      const { cwd, on } = await where(here);
       let address = null;
       try {
         if (!cwd) throw new Error("No folder");

@@ -1,8 +1,9 @@
-// focus している pane の branch の pull request を、CI と review の状態と一緒に見る
+// focus している pane の agent が今居る folder (agent が居なければ pane の folder) の branch の pull request を、CI と review の状態と一緒に見る
 // dialog を閉じると mod も止まるので、取り直すのも CI の終了を知らせるのも開いている間だけ
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, TextView, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { spaces, panes, focused, exec, run, notify, theme, props, closeOverlay } from "herdr";
+import { panes, focused, exec, run, notify, theme, props, closeOverlay } from "herdr";
+import { location, where } from "./where.js";
 
 const ROW = 28, TICK = 15000;
 const LABEL = { fail: "failed", running: "running", pass: "passed", skip: "skipped" };
@@ -27,12 +28,6 @@ fragment pr on PullRequest {
   } } } } } }
 }
 `;
-
-function location() {
-  const space = spaces().find(s => s.active), f = focused();
-  const pane = f?.pane ? panes().find(p => p.pane === f.pane) : null;
-  return { cwd: pane?.cwd || f?.cwd || space?.folder, on: space?.machine ?? null, branch: pane?.branch ?? space?.branch ?? null };
-}
 
 const words = s => s.toLowerCase().replace(/_/g, " ");
 // pull request の template 等に入っている HTML の comment は、GitHub の画面と同じく出さない
@@ -96,7 +91,7 @@ export default class PullRequest extends View {
     cx.timer.after(600, () => this.handle.focus());
     // CI が動いている間は TICK ごと、それ以外は 4 回に 1 回 (1 分ごと) 取り直す
     cx.timer.every(TICK, cx => { if (this.running || ++this.ticks % 4 === 0) this.refresh(cx); });
-    this.refresh(cx);
+    cx.spawn(async cx => { this.loc = await where(this.loc); this.refresh(cx); });
   }
 
   // {owner} {repo} {branch} は gh が cwd の repository から埋める。埋めるのは -F の値だけ

@@ -1,9 +1,10 @@
 // 表示している space の tab ごとに、そこの agent が何をしているかを出す右 panel
-// goal、plan、判断と仮定、残っている事は、task-notes が turn の後に書く要約から (../task-notes)。変更と commit は git から出す
+// goal、plan、判断と仮定、残っている事は、task-notes が turn の後に書く要約から (../task-notes)。変更と commit は、agent が今居る folder の git から出す
 // 要約は agent の動く machine の $XDG_STATE_HOME/task-notes/<tab の id>.json にある
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, agents, shared, theme, run, exec, layout } from "herdr";
+import { where } from "./where.js";
 
 const POLL = 15000;
 const STEP = { done: ["✓", "done"], now: ["◐", "working"], todo: ["○", "dim"] };
@@ -43,7 +44,8 @@ function find(node, id) {
 
 export default class Tasks extends View {
   init(_props, cx) {
-    this.summaries = {}; this.changes = {}; this.busy = {}; this.selected = null;
+    // places は tab ごとに where で訊いた、agent の居る folder と branch
+    this.summaries = {}; this.changes = {}; this.places = {}; this.busy = {}; this.selected = null;
     // 隠れている間も timer は回るので、見えている時だけ取り直す
     cx.timer.every(POLL, cx => { if (this.visible()) this.load(cx, true); });
   }
@@ -65,7 +67,7 @@ export default class Tasks extends View {
       if (!pane) continue;
       // 他の machine の id には "<machine>/" が前に付く。その machine の上では付かない
       const key = space.machine ? tab.id.slice(space.machine.length + 1) : tab.id;
-      list.push({ id: tab.id, key, tab, name: label(pane), program: pane.program, cwd: pane.cwd, branch: pane.branch, on: space.machine, agent: agents().find(a => a.tab === tab.id) });
+      list.push({ id: tab.id, key, tab, name: label(pane), program: pane.program, cwd: pane.cwd, branch: pane.branch, terminal: pane.terminal, on: space.machine, agent: agents().find(a => a.tab === tab.id) });
     }
     return { space, list };
   }
@@ -76,10 +78,13 @@ export default class Tasks extends View {
     this.busy[task.id] = true;
     cx.spawn(async cx => {
       try {
-        const [note, diff] = await Promise.all([
+        const [note, place] = await Promise.all([
           exec("sh", ["-c", READ, "read", task.key], { on: task.on }).catch(() => null),
-          exec("sh", ["-c", CHANGES], { cwd: task.cwd, on: task.on }).catch(() => null),
+          where(task),
         ]);
+        this.places[task.id] = place;
+        // agent が下の階層に居ても、数えるのは checkout 全体
+        const diff = await exec("sh", ["-c", CHANGES], { cwd: place.root ?? place.cwd, on: task.on }).catch(() => null);
         let summary = null;
         try { summary = note?.stdout ? JSON.parse(note.stdout) : null; } catch {}
         this.summaries[task.id] = summary;
@@ -100,7 +105,8 @@ export default class Tasks extends View {
     this.current = task;
     if (this.visible()) this.load(cx, false);
     const s = task ? this.summaries[task.id] : null, changes = task ? this.changes[task.id] : null;
-    const pr = task?.branch ? (shared("inbox.github")?.prs ?? []).find(p => p.branch === task.branch) : null;
+    const branch = task ? (this.places[task.id] ?? task).branch : null;
+    const pr = branch ? (shared("inbox.github")?.prs ?? []).find(p => p.branch === branch) : null;
 
     const label = (text, right) => h_flex().gap(8).items_center().pb(2)
       .child(div().text_size(11).font_medium().text_color(t.dim).child(text))
@@ -120,7 +126,7 @@ export default class Tasks extends View {
     const body = !task ? [div().text_color(t.dim).child(space ? "No terminals in this space" : "No space")] : [
       v_flex().gap(3)
         .child(div().text_size(15).font_semibold().child(task.name))
-        .child(div().text_size(11).text_color(t.dim).child([`${space.name} › ${task.tab.name}`, task.branch, s?.updatedAt ? `updated ${ago(s.updatedAt)}` : ""].filter(Boolean).join(" · "))),
+        .child(div().text_size(11).text_color(t.dim).child([`${space.name} › ${task.tab.name}`, branch, s?.updatedAt ? `updated ${ago(s.updatedAt)}` : ""].filter(Boolean).join(" · "))),
       ...(task.agent?.status === "blocked" ? [h_flex().id("tk-open").p(10).gap(8).items_center().rounded(8).bg(t.raised).border_1().border_color(t.blocked).cursor_pointer()
         .on_click(() => run("agent.focus", { terminal: task.agent.address }))
         .child(div().flex_1().text_size(11).font_semibold().text_color(t.blocked).child("WAITING ON YOU"))

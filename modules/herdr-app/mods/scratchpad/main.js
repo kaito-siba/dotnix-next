@@ -5,7 +5,8 @@
 import { mkdir, readFile, readdir, unlink } from "fs/promises";
 import { View, div, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, Scrollbar, v_virtual_list, VirtualListScrollHandle, InputState, Input } from "gpui-base";
-import { spaces, panes, focused, exec, hc, run, notify, appHome, readTextFile, watchFolder, theme, settings, props, closeOverlay } from "herdr";
+import { panes, focused, exec, hc, run, notify, appHome, readTextFile, watchFolder, theme, settings, props, closeOverlay } from "herdr";
+import { location, where } from "./where.js";
 
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", toml: "yaml", jsonc: "json", svelte: "html", vue: "html" };
 const MAX_FILES = 500, MAX_PREVIEW = 400000, POLL = 5000, ROW = 28, PAD = 16;
@@ -70,12 +71,6 @@ list() {
 # sort と head の -z も GNU 専用なので、並べ替える間だけ改行区切りにする
 if [ "$mode" = all ]; then list "$@" | tr '\\0' '\\n' | sort -rn | head -n "$max" | tr '\\n' '\\0'; else list; fi
 `;
-
-function location() {
-  const space = spaces().find(s => s.active), f = focused();
-  const pane = f?.pane ? panes().find(p => p.pane === f.pane) : null;
-  return { cwd: pane?.cwd || f?.cwd || space?.folder, on: space?.machine ?? null, terminal: f?.terminal ?? pane?.terminal ?? null };
-}
 
 function parse(stdout, box) {
   const out = [];
@@ -172,12 +167,16 @@ export default class Scratchpad extends View {
   async close() { await this.drop(this.picture); }
 
   // focus している pane で動いている Claude Code を調べて、表示をその session に絞る
-  // 端末の foreground の pid から、Claude Code が ~/.claude/sessions/<pid>.json に書いている session id と起動した folder を引く
-  // sbx 越しだと foreground は sbx で、中の session までは分からないので、sandbox の中だけに絞る
+  // session と agent の居る folder は task-notes where に訊く (./where.js)。sbx 越しなら sandbox の中だけに絞り、session が分かればそれにも絞る
+  // 訊けない時は、端末の foreground の pid から、Claude Code が ~/.claude/sessions/<pid>.json に書いている session id と folder を引く。sbx 越しだと中の session までは分からない
   // Claude Code が動いていない pane は null。その時は folder で動いた全 session を並べる
   async resolve() {
     const { terminal, on } = this.loc;
     if (!terminal) return null;
+    const place = await where(this.loc);
+    if (place.source === "claude") return place.session ? { id: place.session, cwd: place.cwd } : null;
+    if (place.source === "sbx") return on ? null : { box: true, id: place.session, cwd: place.cwd };
+    if (place.source) return null;
     try {
       const fg = JSON.parse((await hc(["get", terminal, "--json"])).stdout).foreground;
       if (!fg) return null;
@@ -194,9 +193,9 @@ export default class Scratchpad extends View {
   terms() { return this.filter.toLowerCase().split(/\s+/).filter(Boolean); }
 
   // sbx exec は止まっている sandbox を起動してしまうので、動いている物だけを毎回調べ直す
-  // この folder を workspace に含まない sandbox に、ここの scratchpad は無い
+  // agent の居る folder を workspace に含まない sandbox に、ここの scratchpad は無い
   async sandboxes() {
-    const { cwd, on } = this.loc;
+    const { on } = this.loc, cwd = this.scope?.cwd ?? this.loc.cwd;
     if (on) return [];
     try {
       const r = await exec("sbx", ["ls", "--json"]);
@@ -216,7 +215,7 @@ export default class Scratchpad extends View {
 
   // sbx の sandbox は microVM なので、中の /tmp は sbx exec 越しにしか読めない
   async inside(args) {
-    if (this.only()?.id) return [];
+    if (this.only() && !this.only().box) return [];
     const lists = await Promise.all((await this.sandboxes()).map(box =>
       exec("sbx", ["exec", box, "sh", ...args]).then(r => r.code === 0 ? parse(r.stdout, box) : [], () => [])));
     return lists.flat();
