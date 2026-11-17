@@ -51,7 +51,14 @@ SLACK_TOOLS = [
     "mcp__claude_ai_Slack__slack_read_thread",
     "mcp__claude_ai_Slack__slack_read_user_profile",
     "mcp__claude_ai_Slack__slack_search_users",
-    "mcp__claude_ai_Slack__slack_get_reactions",
+]
+# claude takes the permission mode from the user's settings, and auto mode may approve tools not listed above.
+SLACK_WRITES = [
+    "mcp__claude_ai_Slack__slack_send_message",
+    "mcp__claude_ai_Slack__slack_send_message_draft",
+    "mcp__claude_ai_Slack__slack_schedule_message",
+    "mcp__claude_ai_Slack__slack_create_canvas",
+    "mcp__claude_ai_Slack__slack_update_canvas",
 ]
 SWEEP_SCHEMA = {
     "type": "object",
@@ -77,8 +84,9 @@ SWEEP_SCHEMA = {
 }
 STANDUP_SCHEMA = {
     "type": "object",
-    "required": ["bullets", "error"],
-    "properties": {"bullets": {"type": "array", "items": {"type": "string"}}, "error": {"type": "string"}},
+    "required": ["bullets", "slackChecked", "note"],
+    "properties": {"bullets": {"type": "array", "items": {"type": "string"}}, "slackChecked": {"type": "boolean"},
+                   "note": {"type": "string"}},
 }
 
 
@@ -90,9 +98,9 @@ def now_ms():
     return int(time.time() * 1000)
 
 
-def run(*cmd, timeout=60):
+def run(*cmd, timeout=60, cwd=None):
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
     except (OSError, subprocess.TimeoutExpired) as e:
         return subprocess.CompletedProcess(cmd, 1, "", str(e))
 
@@ -130,7 +138,7 @@ def empty_slack():
 
 
 def empty_standup():
-    return {"day": None, "label": None, "bullets": [], "writtenAt": 0, "error": ""}
+    return {"day": None, "label": None, "bullets": [], "writtenAt": 0, "slackChecked": False, "note": "", "error": ""}
 
 
 def claude(prompt, schema, model, tools, timeout):
@@ -138,8 +146,8 @@ def claude(prompt, schema, model, tools, timeout):
     work = STATE / "work"  # an empty folder: no repository's CLAUDE.md or settings apply
     work.mkdir(parents=True, exist_ok=True)
     r = run("claude", "-p", prompt, "--model", model, "--tools", "ToolSearch", "--allowedTools", ",".join(tools),
-            "--output-format", "json", "--json-schema", json.dumps(schema), "--no-session-persistence",
-            "--max-budget-usd", "2", timeout=timeout)
+            "--disallowedTools", ",".join(SLACK_WRITES), "--output-format", "json", "--json-schema", json.dumps(schema),
+            "--no-session-persistence", "--max-budget-usd", "2", timeout=timeout, cwd=work)
     try:
         answer = json.loads(r.stdout)
     except ValueError:
@@ -293,7 +301,7 @@ def gather(win):
 def standup_prompt(win, found):
     part = lambda title, lines: f"{title}:\n" + ("\n".join(f"- {x}" for x in lines) or "(none)")
     return f"""Write my standup answer to "What did you accomplish?" for {win['label']}, {win['day']}. Nobody reads a chat; your answer is the JSON.
-Load the Slack tools with ToolSearch, then look at the messages I sent that day (from:me, {win['day']} 00:00 to 23:59 my time), for work that did not leave a commit: reviews, debugging help, decisions. Read only: never post or change anything. If Slack is not available, write from what is below.
+First call ToolSearch for the Slack tools, even if neither ToolSearch nor any Slack tool is in your tool list: Slack connects after you start, and ToolSearch waits for it. Then look at the messages I sent that day (from:me, {win['day']} 00:00 to 23:59 my time), for work that did not leave a commit: reviews, debugging help, decisions. Read only: never post or change anything.
 
 What I did that day:
 {part("Commits", found["commits"])}
@@ -310,20 +318,23 @@ bullets: 3 to 7, one line each, outcome first, grouped by project where it helps
 Merge the agent summaries with the commits instead of repeating them. Skip trivia (formatting, typo fixes, merges).
 A Slack ask earns a bullet only when it was real work (a review, a fix, a decision, an unblock).
 Write in the language my commits and messages are mostly in. Never invent work; with nothing to report, return no bullets.
-error: "" unless something kept you from writing the draft."""
+slackChecked: true only when a Slack search for my messages ran and answered, even with no results.
+note: one short sentence when something is missing from the draft, such as Slack not being searched; otherwise "". Write the bullets either way."""
 
 
 def standup():
     win = window()
     try:
-        out = claude(standup_prompt(win, gather(win)), STANDUP_SCHEMA, CONFIG.get("standup_model", "sonnet"), SLACK_TOOLS, 420)
+        out, error = claude(standup_prompt(win, gather(win)), STANDUP_SCHEMA, CONFIG.get("standup_model", "sonnet"), SLACK_TOOLS, 420), ""
     except (RuntimeError, OSError) as e:
-        out = {"error": str(e)}
+        out, error = {}, str(e)
     with state("standup", empty_standup) as s:
-        s["error"] = out.get("error") or ""
-        if not s["error"]:
-            s.update(day=win["day"], label=win["label"], bullets=out.get("bullets") or [], writtenAt=now_ms())
-    log(f"standup {win['day']}: {len(out.get('bullets') or [])} bullets, error={out.get('error')!r}")
+        s["error"] = error
+        if not error:
+            checked = out.get("slackChecked") is True
+            s.update(day=win["day"], label=win["label"], bullets=out.get("bullets") or [], writtenAt=now_ms(), slackChecked=checked,
+                     note=out.get("note") or ("" if checked else "Slack was not checked"))
+    log(f"standup {win['day']}: {len(out.get('bullets') or [])} bullets, slackChecked={out.get('slackChecked')}, note={out.get('note')!r}, error={error!r}")
 
 
 # --- HTTP ------------------------------------------------------------------------
