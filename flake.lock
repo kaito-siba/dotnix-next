@@ -105,6 +105,22 @@
         "type": "github"
       }
     },
+    "herbarium": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1794730497,
+        "narHash": "sha256-l1XSRKetCz/HWzFZ0Lk34pjKGQ/CFeJ1vgZwC9ECZ7I=",
+        "ref": "refs/heads/main",
+        "rev": "180db65ffd5b100ca9a65a1c13ba2c0f559edb52",
+        "revCount": 26,
+        "type": "git",
+        "url": "ssh://git@github.com/kaito-siba/herbarium"
+      },
+      "original": {
+        "type": "git",
+        "url": "ssh://git@github.com/kaito-siba/herbarium"
+      }
+    },
     "herdr": {
       "inputs": {
         "nixpkgs": [
@@ -324,6 +340,7 @@
       "inputs": {
         "fievel": "fievel",
         "flake-parts": "flake-parts",
+        "herbarium": "herbarium",
         "herdr": "herdr",
         "home-manager": "home-manager",
         "import-tree": "import-tree",

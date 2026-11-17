@@ -82,6 +82,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # homelab 関連の module
+    herbarium = {
+      url = "git+ssh://git@github.com/kaito-siba/herbarium";
+      flake = false;
+    };
   };
 
   outputs =
