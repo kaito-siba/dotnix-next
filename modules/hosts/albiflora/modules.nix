@@ -14,6 +14,7 @@ in
         tailscale
         noctalia
         sbx
+        work-digest
 
         # Desktop session
         desktop
@@ -71,6 +72,7 @@ in
             hm.smoothcsv
             hm.video-player
             hm.herdr-app
+            hm.work-digest
 
             # Tracking
             hm.activitywatch
