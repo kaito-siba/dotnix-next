@@ -68,7 +68,7 @@ runCommand "herdr-app-show"
     passthru = { inherit show; };
   }
   ''
-    mkdir -p $out/layouts $out/mods/show $out/mods/inbox $out/mods/show-tabs $out/mods/backdrop-agents $out/mods/bare-chrome $out/mods/titled-pane
+    mkdir -p $out/layouts $out/mods/show $out/mods/inbox $out/mods/explorer $out/mods/sandbox $out/mods/show-tabs $out/mods/backdrop-agents $out/mods/bare-chrome $out/mods/titled-pane
 
     install -m644 ${./show/main.js} $out/mods/show/main.js
     install -m644 ${./show/mod.json} $out/mods/show/mod.json
@@ -85,7 +85,17 @@ runCommand "herdr-app-show"
     install -m644 ${./mods/inbox/inbox.svg} $out/mods/inbox/inbox.svg
     install -m644 ${inboxEnv} $out/mods/inbox/env.js
 
-    # layout: 右パネルの stack に show と tasks を足し、タブバーと Agents の一覧と sidebar
+    # Files: focus している pane の folder から file を辿る dialog (explorer) と、
+    # sbx の sandbox を見る dialog (sandbox)。file を辿る所 (browser.js) は同じ物
+    # を使う。import する module は link では置けないので、こちらも mod ごと入れる。
+    install -m644 ${./mods/explorer/main.js} $out/mods/explorer/main.js
+    install -m644 ${./mods/explorer/browser.js} $out/mods/explorer/browser.js
+    install -m644 ${./mods/explorer/mod.json} $out/mods/explorer/mod.json
+    install -m644 ${./mods/sandbox/main.js} $out/mods/sandbox/main.js
+    install -m644 ${./mods/explorer/browser.js} $out/mods/sandbox/browser.js
+    install -m644 ${./mods/sandbox/mod.json} $out/mods/sandbox/mod.json
+
+    # layout: 右パネルの stack から files を外して (explorer で見る) show と tasks を足し、タブバーと Agents の一覧と sidebar
     # の頭と pane の header を写しに差し替える。sidebar の足 (Settings と Add machine) は外す:
     # どちらも key と palette から開ける。
     jq '
@@ -94,8 +104,8 @@ runCommand "herdr-app-show"
       | (.. | objects | select(.id? == "brand") | .content.mod) = "bare-chrome"
       | (.. | objects | select(.id? == "main") | .content.pane.header.content.mod) = "titled-pane"
       | (.. | objects | select(.id? == "sidebar") | .children) |= map(select(.id != "sidebar-footer"))
-      | (.. | objects | select(.id? == "panel-body") | .children)
-          += (["show", "tasks"] | map({id: ., type: "block", content: {mod: .}}))
+      | (.. | objects | select(.id? == "panel-body"))
+          |= (.active = "changes" | .children |= map(select(.id != "files")) + (["show", "tasks"] | map({id: ., type: "block", content: {mod: .}})))
     ' ${mainLayout} > $out/layouts/lycoreco.json
     jq -e '
       [.. | objects | select(.id? == "tabs") | .content.mod] == ["show-tabs"]
@@ -103,7 +113,8 @@ runCommand "herdr-app-show"
       and [.. | objects | select(.id? == "brand") | .content.mod] == ["bare-chrome"]
       and [.. | objects | select(.id? == "main") | .content.pane.header.content.mod] == ["titled-pane"]
       and ([.. | objects | select(.id? == "sidebar-footer")] | length == 0)
-      and ([.. | objects | select(.id? == "panel-body") | .children[].id] | contains(["show", "tasks"]))
+      and [.. | objects | select(.id? == "panel-body") | .children[].id] == ["changes", "show", "tasks"]
+      and [.. | objects | select(.id? == "panel-body") | .active] == ["changes"]
     ' $out/layouts/lycoreco.json > /dev/null
 
     # sidebar の頭: logo と app の名前を出さない。場所は空けたままにして、検索と
@@ -136,8 +147,8 @@ runCommand "herdr-app-show"
     install -m644 ${./backdrop/backdrop.js} $out/mods/backdrop-agents/backdrop.js
     echo '{ "place": "none", "title": "Agents" }' > $out/mods/backdrop-agents/mod.json
 
-    # タブバー: Files / Changes の隣に Show と Tasks のボタンを足す。開いていた
-    # パネルを space ごとに覚える処理にもそれらを通す。その隣に Inbox を開く
+    # タブバー: Files のボタンを外し、Changes の隣に Show と Tasks のボタンを足す。
+    # 開いていたパネルを space ごとに覚える処理にもそれらを通す。その隣に Inbox を開く
     # ボタンも足す。Inbox の中身を数分おきに取りに行くのもここ (./mods/inbox/feed.js):
     # モーダルは開いている間しか生きていないので、いつも出ているタブバーに持たせる。
     { echo 'import { start as startInbox, button as inboxButton } from "./inbox.js";'; cat ${tabsMod}; } > $out/mods/show-tabs/main.js
@@ -147,6 +158,9 @@ runCommand "herdr-app-show"
       --replace-fail \
         'init() {' \
         'init(_props, cx) { startInbox(cx);' \
+      --replace-fail \
+        'const enabled = shared("workspace.panels") ?? ["files", "changes"];' \
+        'const enabled = (shared("workspace.panels") ?? ["changes"]).filter(p => p !== "files");' \
       --replace-fail \
         'enabled.includes(stored) ? stored : null' \
         '(["show", "tasks"].includes(stored) || enabled.includes(stored)) ? stored : null' \

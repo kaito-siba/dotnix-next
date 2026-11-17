@@ -1,24 +1,17 @@
 // sbx (Docker Sandboxes) の sandbox を見る dialog。Files / Ports / Network / Metrics の 4 面がある
-// Files は sandbox の中を yazi のように hjkl で辿り、preview して、host へコピーする
+// Files は sandbox の中を yazi のように hjkl で辿り、preview して、host へコピーする。辿る所は explorer と同じ物 (./browser.js)
 // Ports は host への port の公開、Network は遮断された通信を探して sandbox 単位で許可する
 // sandbox は microVM なので、中の事は全て sbx exec 越しに調べる。sbx exec は止まっている sandbox を起動してしまうので、動いている物にしか使わない
-import { mkdir, readFile, readdir, unlink } from "fs/promises";
-import { View, div, image } from "gpui-kit";
-import { v_flex, h_flex, Editor, EditorState, TextView, Scrollbar, v_virtual_list, VirtualListScrollHandle, InputState, Input } from "gpui-base";
-import { spaces, panes, focused, exec, notify, appHome, theme, settings, props, closeOverlay, nextCommand } from "herdr";
+import { View, div } from "gpui-kit";
+import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle, InputState, Input } from "gpui-base";
+import { spaces, panes, focused, exec, notify, theme, props, closeOverlay, nextCommand } from "herdr";
+import { Browser, LIST, parse, join, ago, bytes } from "./browser.js";
 
 const TABS = ["files", "ports", "network", "metrics"];
 const TITLE = { files: "Files", ports: "Ports", network: "Network", metrics: "Metrics" };
-const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", toml: "yaml", jsonc: "json", svelte: "html", vue: "html" };
-const ROW = 28, PAD = 16, POLL = 5000, MAX_PREVIEW = 400000, MAX_ENTRIES = 5000, HISTORY = 60;
-const PICTURE = new Set(["png", "jpg", "jpeg", "gif", "webp"]);
+const ROW = 28, POLL = 5000, HISTORY = 60;
 // image() は app home からの相対 path しか読めないので、見せる画像はここへコピーする
 const COPIES = "sandbox/preview";
-// app の asset loader の上限 (16 MiB)
-const MAX_PICTURE = 16 * 1024 * 1024;
-
-// 出力は "種類\tsize\tmtime\t名前\0" の繰り返し。種類は link を辿った先の物 (d が directory)
-const LIST = `cd "$1" 2>/dev/null || exit 3; find . -mindepth 1 -maxdepth 1 -printf '%Y\\t%s\\t%T@\\t%f\\0' 2>/dev/null`;
 // CPU の使用率は /proc/stat の差から出すので、間を空けて 2 回読む
 const METRICS = `head -1 /proc/stat; sleep 0.5; head -1 /proc/stat; nproc; cat /proc/loadavg
 grep -E '^(MemTotal|MemAvailable):' /proc/meminfo; df -kP / | tail -1
@@ -35,55 +28,17 @@ function location() {
 // "host の path:中の path" の形と、両方が同じ path の時の path だけの形がある
 const inside = w => w.split(":")[1] ?? w;
 const within = (dir, path) => path === dir || path?.startsWith(dir.replace(/\/$/, "") + "/");
-const join = (dir, name) => `${dir.replace(/\/$/, "")}/${name}`;
-const parent = dir => dir.replace(/\/[^/]+\/?$/, "") || "/";
-
-// image() は大きさを自分で決めないので、画像の header から幅と高さを読む。読めない形式は null
-function measure(b) {
-  const be16 = i => b[i] << 8 | b[i + 1], le16 = i => b[i] | b[i + 1] << 8, le24 = i => le16(i) | b[i + 2] << 16;
-  const tag = (i, s) => [...s].every((c, n) => b[i + n] === c.charCodeAt(0));
-  if (tag(1, "PNG")) return { width: be16(18), height: be16(22) };
-  if (tag(0, "GIF8")) return { width: le16(6), height: le16(8) };
-  if (tag(0, "RIFF") && tag(8, "WEBP")) {
-    if (tag(12, "VP8 ")) return { width: le16(26) & 0x3fff, height: le16(28) & 0x3fff };
-    if (tag(12, "VP8L")) return { width: 1 + (le16(21) & 0x3fff), height: 1 + (le24(22) >> 6 & 0x3fff) };
-    if (tag(12, "VP8X")) return { width: 1 + le24(24), height: 1 + le24(27) };
-  }
-  if (b[0] === 0xff && b[1] === 0xd8) {
-    // segment を順に辿って、大きさを持つ SOF (C4, C8, CC は別物) を探す
-    for (let i = 2; i + 9 < b.length && b[i] === 0xff; i += 2 + be16(i + 2)) {
-      const m = b[i + 1];
-      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { width: be16(i + 7), height: be16(i + 5) };
-    }
-  }
-  return null;
-}
-
-function ago(ms) {
-  const s = Math.max(0, (Date.now() - ms) / 1000);
-  if (s < 60) return "now";
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  // 出す所の幅は 3 文字ぶん。image に入っていた file は何年も前の日付を持つので、日数が 3 桁になる前に単位を上げる
-  const days = Math.floor(s / 86400);
-  return days < 100 ? `${days}d` : days < 365 ? `${Math.floor(days / 7)}w` : `${Math.floor(days / 365)}y`;
-}
-
-function bytes(n) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
-  return `${(n / 1024 ** 3).toFixed(1)} GB`;
-}
+const last = text => text.trim().split("\n").pop();
 
 export default class Sandbox extends View {
   init(_props, cx) {
     this.loc = location();
     // boxes の null は取っている途中の印
     this.boxes = null; this.name = null; this.tab = "files";
-    this.busy = {}; this.error = {}; this.copies = 0;
+    this.busy = {}; this.error = {};
     this.sel = { ports: null, network: null };
-    this.filter = { files: "", network: "" };
+    // Files の絞り込みは browser が持つ
+    this.filter = { network: "" };
     // typing は入力欄の使い道: filter (絞り込み) か port (公開する port)。null は入力していない
     this.typing = null;
     this.input = InputState.new({ placeholder: "" });
@@ -91,7 +46,7 @@ export default class Sandbox extends View {
       // 入力欄を開いた key がそのまま入力される事があるので捨てる
       if (this.opening && this.input.value() === this.opening) { this.opening = null; this.input.set_value(""); return; }
       this.opening = null;
-      if (this.typing === "filter") { this.filter[this.tab] = this.input.value(); this.sync(cx); cx.notify(); }
+      if (this.typing === "filter") { this.filter[this.tab] = this.input.value(); cx.notify(); }
     });
     this.input.on("submit", (_e, cx) => {
       if (this.typing === "port") this.publish(this.input.value().trim(), cx);
@@ -107,21 +62,14 @@ export default class Sandbox extends View {
     cx.timer.every(POLL, cx => this.refresh(cx));
     // keys.json から面を直に開ける: "sandbox.network" 等
     cx.spawn(async cx => { for (;;) { const c = await nextCommand(); if (TABS.includes(c)) this.show(c, cx); } });
-    cx.spawn(async cx => {
-      // 前に開いた時のコピーが残っている事がある (app が落ちた時など)
-      const old = await readdir(`${appHome()}/${COPIES}`).catch(() => []);
-      await Promise.all(old.map(name => this.drop({ path: `${appHome()}/${COPIES}/${name}` })));
-      this.refresh(cx);
-    });
+    cx.spawn(async cx => { await Browser.sweep(COPIES); this.refresh(cx); });
   }
 
-  async close() { await this.drop(this.picture); }
+  async close() { await this.browser?.close(); }
 
   // sandbox ごとの状態。sandbox を切り替えたら捨てる
   reset() {
-    this.dirs = new Map(); this.at = new Map(); this.dir = null;
-    this.shown = null; this.code?.release(); this.code = null; this.text = null; this.why = null;
-    this.drop(this.picture); this.picture = null;
+    this.browser?.close(); this.browser = null;
     this.ports = null; this.listening = []; this.net = null; this.metrics = null; this.history = [];
   }
 
@@ -153,7 +101,7 @@ export default class Sandbox extends View {
     });
     if (!this.box()) return;
     const tab = this.tab;
-    if (tab === "files" && this.running()) this.list(cx, this.dir, true);
+    if (tab === "files" && this.running()) this.browser?.reload(cx);
     else if (tab === "ports") this.loadPorts(cx);
     else if (tab === "network") this.loadNet(cx);
     else if (tab === "metrics" && this.running()) { this.loadMetrics(cx); this.loadNet(cx); }
@@ -174,7 +122,22 @@ export default class Sandbox extends View {
     // pane が workspace の中に居れば、そこから始める
     const roots = (box.workspaces ?? []).map(inside), { cwd } = this.loc;
     const host = (box.workspaces ?? []).find(w => cwd && within(w.split(":")[0], cwd));
-    this.dir = host ? inside(host) + cwd.slice(host.split(":")[0].length) : roots[0] ?? "/";
+    const on = this.loc.on;
+    this.browser = new Browser({
+      id: "sb", copies: COPIES, dir: host ? inside(host) + cwd.slice(host.split(":")[0].length) : roots[0] ?? "/", focus: () => this.handle.focus(),
+      source: {
+        list: async dir => {
+          const r = await exec("sbx", ["exec", name, "sh", "-c", LIST, "ls", dir], { on });
+          return r.code === 0 ? { entries: parse(r.stdout, dir) } : { error: r.code === 3 ? "Cannot open this folder" : last(r.stderr) || "Cannot list this folder" };
+        },
+        read: async (path, max) => {
+          const r = await exec("sbx", ["exec", name, "head", "-c", String(max), path], { on });
+          return r.code === 0 ? { text: r.stdout } : { note: last(r.stderr) || "Cannot read this file" };
+        },
+        // 他の machine の sandbox からは app home へコピーできないので、画像としては出さない
+        fetch: on ? null : async (path, dest) => (await exec("sbx", ["cp", `${name}:${path}`, dest])).code === 0,
+      },
+    });
     this.refresh(cx);
   }
 
@@ -192,109 +155,9 @@ export default class Sandbox extends View {
 
   // ---- Files
 
-  list(cx, dir, again) {
-    if (!dir || (!again && this.dirs.has(dir))) return;
-    this.load(cx, `dir:${dir}`, async (cx, name) => {
-      const r = await exec("sbx", ["exec", name, "sh", "-c", LIST, "ls", dir], { on: this.loc.on });
-      if (name !== this.name) return;
-      if (r.code !== 0) { this.dirs.set(dir, { error: r.code === 3 ? "Cannot open this folder" : r.stderr.trim().split("\n").pop() || "Cannot list this folder" }); return; }
-      const entries = [];
-      for (const record of r.stdout.split("\0")) {
-        const [kind, size, mtime, ...rest] = record.split("\t");
-        if (!rest.length) continue;
-        const file = rest.join("\t");
-        entries.push({ name: file, path: join(dir, file), dir: kind === "d", size: Number(size), mtime: Number(mtime) * 1000 });
-      }
-      entries.sort((a, b) => b.dir - a.dir || a.name.localeCompare(b.name));
-      this.dirs.set(dir, { entries: entries.slice(0, MAX_ENTRIES), more: entries.length > MAX_ENTRIES });
-      this.sync(cx);
-    });
-  }
-
-  entries(dir = this.dir) {
-    const terms = dir === this.dir ? this.filter.files.toLowerCase().split(/\s+/).filter(Boolean) : [];
-    return (this.dirs.get(dir)?.entries ?? []).filter(e => (this.hidden || !e.name.startsWith(".")) && terms.every(term => e.name.toLowerCase().includes(term)));
-  }
-
-  current() {
-    const list = this.entries();
-    return list.find(e => e.name === this.at.get(this.dir)) ?? list[0] ?? null;
-  }
-
-  // 選んでいる物が変わっていたら preview を取り直す。directory なら中身を先に読んでおく
-  sync(cx) {
-    if (this.tab !== "files") return;
-    const e = this.current();
-    if (e?.dir) this.list(cx, e.path);
-    if ((e?.path ?? null) !== this.shown?.path || e?.mtime !== this.shown?.mtime) this.preview(e, cx);
-  }
-
-  enter(cx) {
-    const e = this.current();
-    if (!e?.dir) return;
-    this.dir = e.path; this.filter.files = "";
-    this.list(cx, this.dir, true); this.sync(cx);
-  }
-
-  leave(cx) {
-    if (!this.dir || this.dir === "/") return;
-    const from = this.dir;
-    this.dir = parent(from); this.filter.files = "";
-    // 戻った先では、出てきた folder を選んでおく
-    this.at.set(this.dir, from.split("/").filter(Boolean).pop());
-    this.list(cx, this.dir); this.sync(cx);
-  }
-
-  preview(entry, cx) {
-    this.shown = entry;
-    if (!entry || entry.dir) { this.code?.release(); this.code = null; this.text = null; this.why = null; this.drop(this.picture); this.picture = null; return; }
-    const name = this.name;
-    cx.spawn(async cx => {
-      const ext = entry.name.includes(".") ? entry.name.split(".").pop().toLowerCase() : "txt";
-      // 他の machine の sandbox からは app home へコピーできないので、画像としては出さない
-      const drawn = PICTURE.has(ext) && !this.loc.on;
-      let text = null, note = null, picture = null;
-      try {
-        if (drawn) {
-          picture = await this.copy(name, entry, ext);
-          if (!picture) note = entry.size > MAX_PICTURE ? "Image is too large to preview" : "Cannot preview this image";
-        } else {
-          const r = await exec("sbx", ["exec", name, "head", "-c", String(MAX_PREVIEW + 1), entry.path], { on: this.loc.on });
-          if (r.code === 0) text = r.stdout; else note = r.stderr.trim().split("\n").pop() || "Cannot read this file";
-        }
-      } catch { note = "Cannot preview this file (binary, too large, or unreadable)"; }
-      if (this.shown !== entry) { this.drop(picture); return; }
-      if (text?.includes("\0")) { text = null; note = "Binary file · no text preview"; }
-      if (text && text.length > MAX_PREVIEW) text = text.slice(0, MAX_PREVIEW) + "\n… (file truncated)";
-      this.code?.release(); this.code = null; this.text = text; this.why = note;
-      this.drop(this.picture); this.picture = picture;
-      this.markdown = text !== null && (ext === "md" || ext === "markdown");
-      if (text !== null) {
-        const t = theme();
-        this.code = EditorState.new({ language: LANG[ext] ?? ext, readonly: true, value: text, soft_wrap: this.markdown,
-          font_family: settings().font_family, font_size: 12,
-          syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
-      }
-      cx.notify();
-    });
-  }
-
-  // 同じ path の画像は描画が cache されて、中身が変わっても古いままになる。コピーは毎回違う名前にする
-  async copy(box, entry, ext) {
-    if (entry.size > MAX_PICTURE) return null;
-    const name = `${COPIES}/${Date.now()}-${++this.copies}.${ext}`, path = `${appHome()}/${name}`;
-    await mkdir(`${appHome()}/${COPIES}`, { recursive: true });
-    if ((await exec("sbx", ["cp", `${box}:${entry.path}`, path])).code !== 0) return null;
-    const size = measure(await readFile(path));
-    if (!size?.width || !size.height) { this.drop({ path }); return null; }
-    return { name, path, ...size };
-  }
-
-  drop(picture) { return picture ? unlink(picture.path).catch(() => {}) : null; }
-
   // 選んでいる file か folder を、host の ~/Downloads/sbx/<sandbox>/ へコピーする。置いた path は clipboard に入れる
   save(cx) {
-    const e = this.current();
+    const e = this.browser?.current();
     if (!e) return;
     this.load(cx, "save", async (cx, name) => {
       const r = await exec("sh", ["-c", SAVE, "save", name, e.path], { on: this.loc.on });
@@ -451,21 +314,12 @@ export default class Sandbox extends View {
     return list.find(r => r.key === this.sel[this.tab]) ?? list[0] ?? null;
   }
 
-  move(step, cx) {
-    if (this.tab === "files") {
-      const list = this.entries(), at = list.indexOf(this.current());
-      const to = list[Math.min(list.length - 1, Math.max(0, at + step))];
-      if (!to) return;
-      this.at.set(this.dir, to.name);
-      this.scroll.files.scroll_to_item(list.indexOf(to), "center");
-      this.sync(cx);
-    } else {
-      const rows = this.rows(), list = rows.filter(r => !r.head), at = list.indexOf(this.selected(rows));
-      const to = list[Math.min(list.length - 1, Math.max(0, at + step))];
-      if (!to) return;
-      this.sel[this.tab] = to.key;
-      this.scroll[this.tab].scroll_to_item(rows.indexOf(to), "center");
-    }
+  move(step) {
+    const rows = this.rows(), list = rows.filter(r => !r.head), at = list.indexOf(this.selected(rows));
+    const to = list[Math.min(list.length - 1, Math.max(0, at + step))];
+    if (!to) return;
+    this.sel[this.tab] = to.key;
+    this.scroll[this.tab].scroll_to_item(rows.indexOf(to), "center");
   }
 
   // 入力欄を開く (mode と、開いた key)、または閉じる。keep は絞り込みを残して閉じる印
@@ -477,7 +331,7 @@ export default class Sandbox extends View {
       this.input.set_value(mode === "filter" ? this.filter[this.tab] ?? "" : "");
       this.input.focus();
     } else {
-      if (was === "filter" && !keep && this.filter[this.tab]) { this.filter[this.tab] = ""; this.sync(cx); }
+      if (was === "filter" && !keep && this.filter[this.tab]) this.filter[this.tab] = "";
       if (was) this.handle.focus();
     }
     cx.notify();
@@ -486,6 +340,8 @@ export default class Sandbox extends View {
   key(e, cx) {
     if (e.modifiers.control || e.modifiers.alt || e.modifiers.platform) return;
     const k = e.key, shift = e.modifiers.shift, tab = this.tab;
+    // Files を出している間は、辿る key と絞り込みを browser が受ける
+    if (tab === "files" && this.running() && this.browser?.key(e, cx)) return;
     if (this.typing) {
       if (k === "escape") this.type(null, cx);
       else if (k === "down") this.move(1, cx);
@@ -495,7 +351,7 @@ export default class Sandbox extends View {
       return cx.stop_propagation();
     }
     const row = tab === "ports" || tab === "network" ? this.selected() : null;
-    if (k === "escape" && this.filter[tab]) { this.filter[tab] = ""; this.sync(cx); }
+    if (k === "escape" && this.filter[tab]) this.filter[tab] = "";
     else if (k === "escape" || k === "q") closeOverlay(props().overlay);
     else if (k >= "1" && k <= "4" && !shift) this.show(TABS[Number(k) - 1], cx);
     else if (k === "tab") this.show(TABS[(TABS.indexOf(tab) + (shift ? TABS.length - 1 : 1)) % TABS.length], cx);
@@ -504,15 +360,9 @@ export default class Sandbox extends View {
     else if (k === "j" || k === "down") this.move(1, cx);
     else if (k === "k" || k === "up") this.move(-1, cx);
     else if (k === "g") this.move(shift ? Infinity : -Infinity, cx);
-    else if (k === "/" && (tab === "files" || tab === "network")) this.type("filter", cx);
+    else if (k === "/" && tab === "network") this.type("filter", cx);
     else if (tab === "files") {
-      const file = this.current();
-      if (k === "l" || k === "right" || k === "enter") this.enter(cx);
-      else if (k === "h" || k === "left" || k === "backspace") this.leave(cx);
-      else if (k === ".") { this.hidden = !this.hidden; this.sync(cx); }
-      else if (k === "m") this.raw = !this.raw;
-      else if (k === "s") this.save(cx);
-      else if (k === "y" && file) { cx.write_to_clipboard(file.path); notify({ title: "Sandbox", body: `Copied ${file.path}`, timeout: 2000 }); }
+      if (k === "s") this.save(cx);
       else return;
     } else if (tab === "ports") {
       const url = row?.port ? `http://localhost:${row.port.host_port}` : null;
@@ -557,54 +407,6 @@ export default class Sandbox extends View {
   }
 
   note(t, text) { return div().p(16).text_color(t.dim).child(text); }
-
-  files(t) {
-    const here = this.dirs.get(this.dir), list = this.entries(), cur = this.current();
-    const filtering = this.typing === "filter" || Boolean(this.filter.files);
-    return h_flex().flex_1().min_h(0).items_start()
-      .child(v_flex().w(360).h_full().flex_none().border_r(1).border_color(t.border)
-        .child(h_flex().h(30).flex_none().px(14).items_center().border_b(1).border_color(t.border).text_size(11).text_color(t.dim).child(div().min_w(0).truncate().child(this.dir ?? "")))
-        .when(filtering, el => el.child(this.field(t, "Filter")))
-        .child(list.length
-          ? this.table(t, "sb-files", list, e => e.path, e => this.line(t, e === cur)
-              .child(div().flex_1().min_w(0).truncate().when(e.dir, el => el.text_color(t.accent)).child(e.dir ? `${e.name}/` : e.name))
-              .child(div().flex_none().text_size(11).text_color(t.dim).child(e.dir ? "" : bytes(e.size)))
-              .child(div().w(26).flex_none().text_size(11).text_color(t.dim).child(ago(e.mtime))),
-            (path, cx) => { const e = list.find(e => e.path === path); if (e) { this.at.set(this.dir, e.name); this.sync(cx); } })
-          : this.note(t, here?.error ?? (!here ? "Loading…" : this.filter.files ? "No files match the filter" : this.hidden ? "Empty folder" : "Nothing here · press . for hidden files")))
-        .when(Boolean(here?.more), el => el.child(div().flex_none().px(14).py(4).text_size(11).text_color(t.dim).child(`Showing the first ${MAX_ENTRIES} entries`))))
-      .child(this.preview_pane(t, cur).h_full());
-  }
-
-  // 領域に収まる大きさで置く。元の大きさより拡げない。透過した画像は白地を前提にした物が多いので、下に白を敷く
-  drawing(p) {
-    const area = this.area ?? { width: 800, height: 600 };
-    const scale = Math.max(0.01, Math.min((area.width - 2 * PAD) / p.width, (area.height - 2 * PAD) / p.height, 1));
-    const w = Math.round(p.width * scale), h = Math.round(p.height * scale);
-    return div().id("sb-picture").flex_1().min_h(0).w_full().flex().items_center().justify_center().overflow_hidden()
-      .on_size_change((size, cx) => { this.area = size; cx.notify(); })
-      .child(div().w(w).h(h).flex_none().bg("#ffffff").child(image(p.name).w(w).h(h)));
-  }
-
-  preview_pane(t, e) {
-    if (!e) return v_flex().flex_1().min_w(0);
-    const inner = e.dir ? this.dirs.get(e.path) : null, kids = e.dir ? this.entries(e.path) : [];
-    const body = e.dir
-      ? (kids.length
-        ? v_flex().id(`sb-kids-${e.path}`).flex_1().min_h(0).overflow_y_scrollbar().px(14).py(8).gap(2).text_size(12)
-          .children(kids.slice(0, 200).map(k => div().truncate().text_color(k.dir ? t.accent : t.muted).child(k.dir ? `${k.name}/` : k.name)))
-        : this.note(t, inner?.error ?? (inner ? "Empty folder" : "Loading…")))
-      : this.shown?.path !== e.path ? this.note(t, "Loading file…")
-      : this.picture ? this.drawing(this.picture)
-      : this.code === null ? this.note(t, this.why || "Loading file…")
-      : this.markdown && !this.raw ? v_flex().id("sb-markdown").flex_1().min_h(0).overflow_y_scrollbar().px(20).py(14).text_size(13).child(TextView.markdown(`sb-md-${e.path}`, this.text).selectable(true))
-      : Editor.new(this.code).flex_1().min_h(0);
-    return v_flex().flex_1().min_w(0).min_h(0)
-      .child(h_flex().h(30).flex_none().px(14).gap(10).items_center().border_b(1).border_color(t.border).text_size(11).text_color(t.dim)
-        .child(div().flex_1().min_w(0).truncate().child(e.path))
-        .child(div().flex_none().child(`${e.dir ? "folder" : bytes(e.size)} · ${new Date(e.mtime).toLocaleString()}`)))
-      .child(body);
-  }
 
   portsView(t) {
     const rows = this.portRows(), sel = this.selected(rows);
@@ -686,7 +488,7 @@ export default class Sandbox extends View {
 
   hint() {
     const common = "1-4 view · [ ] sandbox · r reload · q close";
-    if (this.tab === "files") return `hjkl move · / filter · . hidden${this.markdown ? " · m raw" : ""} · s save to host · y copy path ·${common}`;
+    if (this.tab === "files") return `${this.browser?.hint() ?? ""} · s save to host · ${common}`;
     if (this.tab === "ports") return `j/k move · a publish · Enter open · y copy URL · d unpublish · ${common}`;
     if (this.tab === "network") return `j/k move · / search · a allow for this sandbox · A allow all listed · d dismiss / remove rule · ${common}`;
     return common;
@@ -698,7 +500,7 @@ export default class Sandbox extends View {
     const body = this.boxes === null ? this.note(t, this.error.boxes ?? "Loading…")
       : !box ? this.note(t, this.error.boxes ?? `No sandboxes${this.loc.on ? ` on ${this.loc.on}` : ""} · create one with sbx create`)
       : stopped ? this.note(t, `${box.name} is ${box.status} · start it with sbx run to look inside`)
-      : this.tab === "files" ? this.files(t) : this.tab === "ports" ? this.portsView(t) : this.tab === "network" ? this.network(t) : this.metricsView(t);
+      : this.tab === "files" ? this.browser.render(t) : this.tab === "ports" ? this.portsView(t) : this.tab === "network" ? this.network(t) : this.metricsView(t);
     const waiting = this.netRows().filter(r => r.state === "pending").length;
     // dialog の枠は角丸だが、中身は角丸に切り抜かれない。背景も同じ丸みにして、角からはみ出させない
     return v_flex().id("sandbox").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))

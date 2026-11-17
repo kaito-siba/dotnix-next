@@ -106,6 +106,8 @@ in
         "g p" = "mod.open:pr";
         # sbx の sandbox の中のファイル、port の公開、通信の許可、負荷を見る。
         "shift-s" = "mod.open:sandbox";
+        # focus している pane の folder から file を辿る。
+        "f" = "mod.open:explorer";
         # app に copy mode は無いので、選択を動かす command を使う mod で作る。
         "[" = "mod.open:copy-mode";
         # 自分の手を待っている物 (agent、Slack、CI、review 依頼) を並べる。
@@ -168,10 +170,6 @@ in
         };
         xdg.configFile."herdr-app/mods/navigator" = {
           source = ./mods/navigator;
-          recursive = true;
-        };
-        xdg.configFile."herdr-app/mods/sandbox" = {
-          source = ./mods/sandbox;
           recursive = true;
         };
         # 右パネルの Tasks。layout とタブバーへの組み込みは ./_show.nix、出す要約を
