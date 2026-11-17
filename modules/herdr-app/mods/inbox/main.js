@@ -49,9 +49,9 @@ export default class Inbox extends View {
       ...group("Needs you", w.blocked.map(a => ({ key: `b:${a.address}`, tint: "blocked", title: name(a), side: where(a), body: askOf(a), agent: a.address }))),
       ...group("Finished", w.done.map(a => ({ key: `d:${a.address}`, tint: "done", title: name(a), side: where(a), agent: a.address }))),
       ...group("Slack", w.slack.map(item => ({ key: `s:${item.permalink}`, slack: item, url: item.permalink, mark: mark(slackKey(item.permalink)) }))),
-      // Enter と copy と paste は、最初の発生源の URL。status は、triage の間は candidate と決まっているので出さない
+      // Enter と copy と paste は、最初の発生源の URL
       ...group("Commitments", w.commitments.map(c => ({ key: `m:${c.id}`, commitment: c, tint: REASONS[c.reason]?.[1] ?? "dim", title: c.title, mark: `#${c.id}`,
-        side: [REASONS[c.reason]?.[0] ?? c.reason, c.reason !== "triage" && c.status, c.due && `due ${c.due}`, c.size].filter(Boolean).join(" · "),
+        side: [REASONS[c.reason]?.[0] ?? c.reason, c.due && `due ${c.due}`, c.size].filter(Boolean).join(" · "),
         body: c.summary, url: c.sources[0]?.url ?? null }))),
       // copy と paste は pull request の URL、Enter は落ちた check
       ...group("CI failed", w.failing.map(pr => ({ key: `c:${pr.url}`, tint: "ansi1", title: `#${pr.number} ${pr.title}`, side: pr.branch,
@@ -94,9 +94,8 @@ export default class Inbox extends View {
 
   // commitment の状態を決める。collect の最中は aw-secretary が書かせないので、送らない
   decide(cx, row, status) {
-    const s = secretary();
-    if (s?.view?.running) this.note = "aw-secretary is collecting. Try again when it finishes";
-    else if (writing(s)) this.note = "Waiting for aw-secretary to answer the last change";
+    if (secretary()?.view?.running) this.note = "aw-secretary is collecting. Try again when it finishes";
+    else if (writing()) this.note = "Waiting for aw-secretary to answer the last change";
     else consult(cx, row.commitment.id, { status });
   }
 

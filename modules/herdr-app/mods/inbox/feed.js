@@ -5,8 +5,7 @@
 //   "inbox.github"   { prs, at }      開いている pane の branch の pull request と CI
 //   "inbox.reviews"  { list, error }  自分宛の review 依頼
 //   "inbox.digest"   { state, error } 常駐機の work-digest の状態: Slack の依頼と standup の下書き (modules/work-digest)
-//   "inbox.commitments"  { view, error, wrote, sentAt }  常駐機の aw-secretary の commitment (自分への約束) のうち、手を付けるべき物 (GET /commitments?view=inbox の答え)
-//                        wrote は送った書き込みの数。sentAt は答えを待っている書き込みを送った時刻 (ms) で、待っていなければ null
+//   "inbox.commitments"  { view, error }  常駐機の aw-secretary の commitment (自分への約束) のうち、手を付けるべき物 (GET /commitments?view=inbox の答え)
 import { svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, agents, exec, run, shared, setShared } from "herdr";
@@ -16,9 +15,9 @@ import { WORK_DIGEST, COMMITMENTS } from "./env.js";
 const TICK = 60000, PULLS = 3 * 60000, REVIEWS = 5 * 60000, MAX_REPOS = 12;
 // sweep や下書きが走っている間は、終わるのを早めに見に行く
 const DIGEST = 60000, DIGEST_BUSY = 10000;
-// commitment は日に 1 度の collect で増えるので間を空ける。collect の最中と、書き込みを送った後は早めに見に行く
+// commitment は日に 1 度の collect で増えるので間を空ける。collect の最中は、終わるのを早めに見に行く
 const SECRETARY = 5 * 60000, SECRETARY_BUSY = 10000;
-// 書き込みの答えをこれだけ待っても置かれなければ、書いた mod が閉じて途切れたとみなす (ms)
+// 書き込みの答えをこれだけ待っても届かなければ、次の書き込みを受ける (ms)。書いた Inbox が閉じると、その答えは届かない
 const WRITING = 30000;
 const FAILED = new Set(["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
 const TRUNK = new Set(["main", "master", "develop", "trunk"]);
@@ -27,8 +26,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 let busy = false, pulledAt = 0, reviewedAt = 0;
 let asking = false, digestAt = 0;
-// readSeen は、最後に view を置いた読みを始めた時の wrote
-let reading = false, readSeen = 0, consultedAt = 0;
+let reading = false, consultedAt = 0, sentAt = 0;
 
 // GitHub を見に行っている最中か
 export const checking = () => busy;
@@ -119,41 +117,41 @@ export function ask(cx, path, body) {
 // aw-secretary の答え。URL の無い machine では、前に置かれた物 (shared は app を閉じても残る) があっても読まない
 export const secretary = () => COMMITMENTS ? shared("inbox.commitments") ?? null : null;
 
-// 答えを待っている書き込みがあるか。書き込みは、server での順を送った順に揃えるため、1 度に 1 つだけ送る
-export function writing(s) {
-  const age = Date.now() - (s?.sentAt ?? -Infinity);
-  return age >= 0 && age < WRITING;
-}
+// 答えを待っている書き込みがあるか。続けて押した時に server で後の物が先に適用されないよう、答えが届くまで次の書き込みは受けない
+export const writing = () => Date.now() - sentAt < WRITING;
 
-const failure = async r => (await r.json().catch(() => null))?.error ?? `aw-secretary answered ${r.status}`;
+// view の新しさは (rev, at) で比べる。rev は DB に書くたびに増え、日付が変わる時と collect が始まる時は rev が同じまま中身が変わる
+const newer = (a, b) => !b || a.rev > b.rev || a.rev === b.rev && a.at >= b.at;
 
 // aw-secretary に聞く。id が無ければ inbox の view を読むだけ。id があれば body で commitment を変え、変えた後の view を受け取る
-// 読みの答えは、書き込みを待っていない時に始めて、その後に書き込みが送られていない時だけ置く。他は書く前の view かもしれない。捨てた分は、タブバーが読み直して埋める
 export function consult(cx, id, body) {
-  const before = secretary();
-  if (!COMMITMENTS || id && writing(before)) return;
-  // 書き込みには mod をまたいで順を付けるので、数と送った時刻を shared に置く
-  const mine = (before?.wrote ?? 0) + (id ? 1 : 0), clean = !writing(before);
-  if (id) setShared("inbox.commitments", { view: before?.view ?? null, error: before?.error ?? null, wrote: mine, sentAt: Date.now() });
+  if (!COMMITMENTS || id && writing()) return;
+  const mine = Date.now(), knew = secretary()?.view?.running ?? false;
+  if (id) sentAt = mine;
   else reading = true;
   cx.spawn(async cx => {
-    let view = null, error = null;
+    let view = null, error = null, running = false;
     try {
       const r = await (id
         ? fetch(`${COMMITMENTS}/commitments/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         : fetch(`${COMMITMENTS}/commitments?view=inbox`));
-      if (!r.ok) throw new Error(await failure(r));
-      view = await r.json();
+      if (r.ok) view = await r.json();
+      else {
+        const e = await r.json().catch(() => null);
+        running = e?.running ?? false;
+        throw new Error(e?.error ?? `aw-secretary answered ${r.status}`);
+      }
     } catch (e) { error = String(e?.message ?? e); }
     finally {
       consultedAt = Date.now();
-      if (!id) reading = false;
-      const now = secretary();
-      if ((now?.wrote ?? 0) === mine && (id || clean)) {
-        if (!id && view) readSeen = mine;
-        // 聞けなかった時と書けなかった時 (collect の最中の 503 等) は、前の view を残して error だけを付ける
-        const next = { ...now, view: view ?? now?.view ?? null, error };
-        if (id) next.sentAt = null;
+      // WRITING を過ぎて次を送った後に届いた答えでは、次の書き込みを待つのをやめない
+      if (id && sentAt === mine) sentAt = 0;
+      else if (!id) reading = false;
+      // 答えが届く順は聞いた順と限らないので、古い view は置かない。collect の最中と知る前に始めた読みの答えでは、running を外さない。collect が始まる前に読んだ view かもしれない
+      const now = secretary(), last = now?.view ?? null;
+      if (!view || newer(view, last) && (knew || view.running || !last?.running)) {
+        // 聞けなかった時と書けなかった時は、前の view を残して error だけを付ける。collect の最中の 503 は running: true が付くので、すぐに key を止める
+        const next = { view: view ?? (running && last ? { ...last, running } : last), error };
         if (!same(next, now)) setShared("inbox.commitments", next);
       }
       cx.notify();
@@ -166,11 +164,8 @@ export function start(cx) {
   cx.timer.every(TICK, cx => refresh(cx));
   refresh(cx);
   if (COMMITMENTS) {
-    // 書き込みの後は、view を読めるまで読み直す。書いた mod (Inbox) が答えを置かずに閉じた時や、読みの答えを捨てた時の分も、ここで埋める
-    readSeen = secretary()?.wrote ?? 0;
     cx.timer.every(SECRETARY_BUSY, cx => {
-      const s = secretary();
-      if (!reading && !writing(s) && (s?.view?.running || (s?.wrote ?? 0) !== readSeen || Date.now() - consultedAt >= SECRETARY)) consult(cx);
+      if (!reading && (secretary()?.view?.running || Date.now() - consultedAt >= SECRETARY)) consult(cx);
     });
     consult(cx);
   }
