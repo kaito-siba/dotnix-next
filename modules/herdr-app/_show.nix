@@ -77,10 +77,11 @@ runCommand "herdr-app-show"
     install -m644 ${env} $out/mods/show/env.js
 
     # Inbox: 自分の手を待っている物を並べるモーダル。mod が import する module
-    # (feed.js と env.js) は link では置けない: app は mod の folder の外へ辿り着く
-    # import を読まない。なので mod ごと、コピーされるこの木に入れる。
+    # (feed.js と asks.js と env.js) は link では置けない: app は mod の folder の外へ
+    # 辿り着く import を読まない。なので mod ごと、コピーされるこの木に入れる。
     install -m644 ${./mods/inbox/main.js} $out/mods/inbox/main.js
     install -m644 ${./mods/inbox/feed.js} $out/mods/inbox/feed.js
+    install -m644 ${./mods/inbox/asks.js} $out/mods/inbox/asks.js
     install -m644 ${./mods/inbox/mod.json} $out/mods/inbox/mod.json
     install -m644 ${./mods/inbox/inbox.svg} $out/mods/inbox/inbox.svg
     install -m644 ${inboxEnv} $out/mods/inbox/env.js
@@ -97,13 +98,15 @@ runCommand "herdr-app-show"
 
     # layout: 右パネルの stack から files を外して (explorer で見る) show と tasks を足し、タブバーと Agents の一覧と sidebar
     # の頭と pane の header を写しに差し替える。sidebar の足 (Settings と Add machine) は外す:
-    # どちらも key と palette から開ける。
+    # どちらも key と palette から開ける。sidebar の spaces の一覧も外す: space は
+    # navigator (./mods/navigator) で移る。
     jq '
       (.. | objects | select(.id? == "tabs") | .content.mod) = "show-tabs"
       | (.. | objects | select(.id? == "agents") | .content.mod) = "backdrop-agents"
       | (.. | objects | select(.id? == "brand") | .content.mod) = "bare-chrome"
       | (.. | objects | select(.id? == "main") | .content.pane.header.content.mod) = "titled-pane"
       | (.. | objects | select(.id? == "sidebar") | .children) |= map(select(.id != "sidebar-footer"))
+      | (.. | objects | select(.id? == "sidebar-lists") | .children) |= map(select(.id != "spaces"))
       | (.. | objects | select(.id? == "panel-body"))
           |= (.active = "changes" | .children |= map(select(.id != "files")) + (["show", "tasks"] | map({id: ., type: "block", content: {mod: .}})))
     ' ${mainLayout} > $out/layouts/lycoreco.json
@@ -113,17 +116,18 @@ runCommand "herdr-app-show"
       and [.. | objects | select(.id? == "brand") | .content.mod] == ["bare-chrome"]
       and [.. | objects | select(.id? == "main") | .content.pane.header.content.mod] == ["titled-pane"]
       and ([.. | objects | select(.id? == "sidebar-footer")] | length == 0)
+      and [.. | objects | select(.id? == "sidebar-lists") | .children[].id] == ["agents"]
       and [.. | objects | select(.id? == "panel-body") | .children[].id] == ["changes", "show", "tasks"]
       and [.. | objects | select(.id? == "panel-body") | .active] == ["changes"]
     ' $out/layouts/lycoreco.json > /dev/null
 
-    # sidebar の頭: logo と app の名前を出さない。場所は空けたままにして、検索と
-    # sidebar を畳むボタンを右に寄せておく。
-    install -m644 ${chromeMod} $out/mods/bare-chrome/main.js
+    # sidebar の頭: logo と app の名前の代わりに、今の space の名前を出す。spaces の
+    # 一覧を外したので、他に出る所が無い。
+    { echo 'import { spaces } from "herdr";'; cat ${chromeMod}; } > $out/mods/bare-chrome/main.js
     substituteInPlace $out/mods/bare-chrome/main.js \
       --replace-fail \
         'h_flex().flex_1().gap(8).items_center().child(image("frame/welcome/herdr.png").size(20).rounded(5)).child(div().font_semibold().text_color(t.foreground).child("Herdr"))' \
-        'div().flex_1()'
+        'div().flex_1().min_w(0).truncate().font_semibold().text_color(t.foreground).child(spaces().find(s => s.active)?.name ?? "")'
     echo '{ "place": "none", "title": "Sidebar header" }' > $out/mods/bare-chrome/mod.json
 
     # pane の header: agent の pane は、program の名前 ("Claude Code") ではなく
@@ -139,12 +143,21 @@ runCommand "herdr-app-show"
 
     # Agents の一覧: 根に絵を敷く (./backdrop/backdrop.js)。絵の大きさを決める
     # のに根の大きさが要るので、それも取る。sidebar を畳んでいる間は敷かない。
-    { echo 'import { backdrop } from "./backdrop.js";'; cat ${agentsMod}; } > $out/mods/backdrop-agents/main.js
+    # 返事を待っている agent の行の下には、質問の抜粋を出す (./mods/inbox/asks.js)。
+    # 抜粋は Inbox と分け合う。画面を読みに行くのは、いつも出ているこちら。
+    { echo 'import { backdrop } from "./backdrop.js";'; echo 'import { readAsks, withAsk } from "./asks.js";'; cat ${agentsMod}; } > $out/mods/backdrop-agents/main.js
     substituteInPlace $out/mods/backdrop-agents/main.js \
       --replace-fail \
         '.bg(t.chrome)' \
-        '.bg(t.chrome).relative().overflow_hidden().id("agents-backdrop").on_size_change((size, cx) => { this.area = size; cx.notify(); }).when(!collapsed, (el) => el.child(backdrop(this.area)))'
+        '.bg(t.chrome).relative().overflow_hidden().id("agents-backdrop").on_size_change((size, cx) => { this.area = size; cx.notify(); }).when(!collapsed, (el) => el.child(backdrop(this.area)))' \
+      --replace-fail \
+        'this.track(list, now);' \
+        'this.track(list, now); readAsks(cx, list);' \
+      --replace-fail \
+        'const r = row(a, i, subs);' \
+        'const r = withAsk(row(a, i, subs), a, t, collapsed);'
     install -m644 ${./backdrop/backdrop.js} $out/mods/backdrop-agents/backdrop.js
+    install -m644 ${./mods/inbox/asks.js} $out/mods/backdrop-agents/asks.js
     echo '{ "place": "none", "title": "Agents" }' > $out/mods/backdrop-agents/mod.json
 
     # タブバー: Files のボタンを外し、Changes の隣に Show と Tasks のボタンを足す。

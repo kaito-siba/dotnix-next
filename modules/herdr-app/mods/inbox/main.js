@@ -1,10 +1,11 @@
 // 自分の手を待っている物を 1 か所に並べるモーダル。key で選んで、開く、URL を copy する、session に貼る
 // 許可や返事を待っている agent、見ていない間に終わった agent、Slack の依頼、自分の branch の pull request で落ちた CI、自分宛の review 依頼
-// 中身を取りに行くのは ./feed.js。開いていない間はタブバーが見に行き、ここは shared に置かれた物を読む
+// 中身を取りに行くのは ./feed.js と ./asks.js。開いていない間はタブバーと左バーの Agents の一覧が見に行き、ここは shared に置かれた物を読む
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { panes, focused, hc, run, notify, theme, shared, props, closeOverlay } from "herdr";
+import { panes, focused, run, notify, theme, shared, props, closeOverlay } from "herdr";
 import { waiting, checking, refresh, ask } from "./feed.js";
+import { readAsks, askOf } from "./asks.js";
 
 function ago(ms) {
   const s = Math.max(0, (Date.now() - ms) / 1000);
@@ -14,19 +15,8 @@ function ago(ms) {
   return `${Math.floor(s / 86400)}d`;
 }
 
-// 止まっている agent の画面の最後の数行。たいていは質問か、許可を求める prompt
-// 質問とその選択肢が続いている時は、質問から始める
-function snippet(text) {
-  const lines = (text ?? "").split("\n")
-    .map(l => l.replace(/[│─╭╮╰╯┌┐└┘├┤┬┴┼═║▔▁▏▕]/g, " ").replace(/\s+/g, " ").trim())
-    .filter(l => /[\p{L}\p{N}]/u.test(l));
-  const tail = lines.slice(-8), asked = tail.findLastIndex(l => /[?？]$/.test(l));
-  return (asked >= 0 ? tail.slice(asked) : lines.slice(-4)).join(" · ").slice(0, 240);
-}
-
 export default class Inbox extends View {
   init(_props, cx) {
-    this.snips = {};
     // sel が null の間と、選んでいた行が消えた後は、at の位置の行を選ぶ
     this.sel = null; this.at = 0;
     this.scroll = ScrollHandle.new();
@@ -39,26 +29,13 @@ export default class Inbox extends View {
     ask(cx);
   }
 
-  // agent が止まった時に一度だけ、その画面を読む。動き出したら捨てる
-  read(cx, blocked) {
-    for (const address of Object.keys(this.snips)) if (!blocked.some(a => a.address === address)) delete this.snips[address];
-    for (const a of blocked) {
-      if (a.address in this.snips) continue;
-      this.snips[a.address] = "";
-      cx.spawn(async cx => {
-        const r = await hc(["read", a.address, "--lines", "40"]).catch(() => null);
-        if (a.address in this.snips) { this.snips[a.address] = snippet(r?.stdout); cx.notify(); }
-      });
-    }
-  }
-
   // head が見出しで、他は選べる行。url は copy と paste に使う物で、agent の行には無い。open は Enter で開く物が url と違う時だけ
   rows(w) {
     const name = a => (a.title ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").trim() || a.program?.name || "agent";
     const where = a => `${a.space_name} · ${a.tab_name}`;
     const group = (title, list) => list.length ? [{ key: `head:${title}`, head: `${title} · ${list.length}` }, ...list] : [];
     return [
-      ...group("Needs you", w.blocked.map(a => ({ key: `b:${a.address}`, tint: "blocked", title: name(a), side: where(a), body: this.snips[a.address] || null, agent: a.address }))),
+      ...group("Needs you", w.blocked.map(a => ({ key: `b:${a.address}`, tint: "blocked", title: name(a), side: where(a), body: askOf(a), agent: a.address }))),
       ...group("Finished", w.done.map(a => ({ key: `d:${a.address}`, tint: "done", title: name(a), side: where(a), agent: a.address }))),
       ...group("Slack", w.slack.map(item => ({ key: `s:${item.permalink}`, slack: item, url: item.permalink }))),
       // copy と paste は pull request の URL、Enter は落ちた check
@@ -180,7 +157,7 @@ export default class Inbox extends View {
   render(cx) {
     const t = theme();
     const w = waiting();
-    this.read(cx, w.blocked);
+    readAsks(cx, w.blocked);
     const rows = this.rows(w), list = rows.filter(r => !r.head);
     let at = list.findIndex(r => r.key === this.sel);
     if (at < 0) at = Math.max(0, Math.min(this.at, list.length - 1));
