@@ -1,13 +1,16 @@
 """herdr の tab ごとに、そこで動く Claude Code が何をしているかの要約を書く。
 
   task-notes hook        Claude Code の Stop hook。裏で summarize を始めて、すぐに返る
-  task-notes summarize   その裏の仕事 (hook が起動する)
+  task-notes summarize   その裏の仕事 (hook と watch が起動する)
+  task-notes watch       sbx の sandbox の中の Claude Code の turn の終わりを、host で見張る
   task-notes where <t>   端末 t の agent が今居る folder を JSON で出す (herdr-app の mod が呼ぶ)
 
 要約は $XDG_STATE_HOME/task-notes/<tab の id>.json に置き、herdr-app の tasks mod が読む。
 最初の要約は、ファイルを書き換えた turn の後に作る。要約のある tab では、turn のたびに
 Haiku を 1 回走らせて前の要約を更新する (会話や command だけの turn でも step は進む)。
 herdr の端末の外 (HC_TERMINAL_ID が無い) では何もしない。
+sandbox の中には task-notes も hc も Stop hook も無いので、そこの turn は watch が
+host の hc events から見つけ、transcript を探して summarize に渡す。
 """
 
 import fcntl
@@ -268,8 +271,8 @@ def locate(terminal, place=None):
     return place
 
 
-def last_turn(transcript):
-    """人が最後に打った prompt から後の message。"""
+def last_turn(transcript, since=None):
+    """人が最後に打った prompt から後の message。since (prompt の uuid) を渡すと、その prompt から次の prompt の前まで。"""
     messages = []
     for line in Path(transcript).read_text().splitlines():
         try:
@@ -283,6 +286,10 @@ def last_turn(transcript):
         content = o["message"].get("content")
         return o["type"] == "user" and (isinstance(content, str) or any(c.get("type") == "text" for c in content))
 
+    at = next((n for n, o in enumerate(messages) if since and o.get("uuid") == since), None)
+    if at is not None:
+        end = next((n for n in range(at + 1, len(messages)) if is_prompt(messages[n])), len(messages))
+        return messages[at:end]
     start = len(messages) - 1
     while start > 0 and not is_prompt(messages[start]):
         start -= 1
@@ -372,14 +379,41 @@ def hook():
     )
 
 
+def settle(transcript, quiet=3, limit=20):
+    """transcript への書き込みが、呼んだ時から数えて quiet 秒止まるまで待つ (長くても limit 秒)。
+
+    呼んだ時に止まっていても待つ: 最後の発言は、turn が終わってから書かれる事がある。
+    """
+    begin = time.time()
+    while (now := time.time()) < begin + limit:
+        try:
+            idle = now - max(os.path.getmtime(transcript), begin)
+        except OSError:
+            return
+        if idle >= quiet:
+            return
+        time.sleep(quiet - idle)
+
+
 def summarize(job):
     job = json.loads(job)
     at = where(job["terminal"])
     if not at:
         return
+    if not job.get("transcript"):
+        # watch から来た sbx の端末。sandbox の中の agent の最後の発言は hook から受け取れないが、
+        # digest は report が空なら transcript の最後の発言を使う。transcript は turn の終わりより
+        # 遅れて書かれるので、書き終わるのを待ってから読む。待つ間に次の prompt が来ても
+        # 終わった turn を読めるよう、その turn の prompt は待つ前に決めておく
+        place = locate(job["terminal"])
+        if place["source"] != "sbx" or not place.get("transcript"):
+            return
+        turn = last_turn(place["transcript"])
+        settle(place["transcript"])
+        job.update(transcript=place["transcript"], cwd=place["cwd"], since=turn[0].get("uuid") if turn else None)
     out = STATE / f"{at['tab']}.json"
     # 待つ前に読む: 待っている間に次の turn が始まると、最後の turn が入れ替わる
-    text, edits, plans = digest(last_turn(job["transcript"]), job.get("report") or "")
+    text, edits, plans = digest(last_turn(job["transcript"], job.get("since")), job.get("report") or "")
     # 前の turn の要約がまだ走っていたら、終わるのを待つ。飛ばすと、すぐ後に
     # 終わった turn (短い返事など) が要約に入らない
     STATE.mkdir(parents=True, exist_ok=True)
@@ -420,6 +454,55 @@ def summarize(job):
         }, ensure_ascii=False, indent=2))
 
 
+def watch():
+    """hc events を追い、sbx の端末で Claude Code の turn が終わったら summarize を始める。
+
+    host で動く Claude Code は Stop hook が summarize を始めるので、ここでは扱わない。
+    hc events が切れたら (core の再起動など) 非 0 で終わり、service の再起動に任せる。
+    """
+    events = subprocess.Popen(["hc", "events", "--json"], stdout=subprocess.PIPE, text=True)
+    terminals, jobs = {}, []
+    for line in events.stdout:
+        jobs = [j for j in jobs if j.poll() is None]
+        try:
+            o = json.loads(line)
+        except ValueError:
+            continue
+        p = o.get("params") or {}
+        # 最初の行と、追い付けなかった時に来る missed は、全ての端末の snapshot
+        if "terminals" in o or o.get("method") == "missed":
+            terminals = {t["address"]: t for t in (o if "terminals" in o else p).get("terminals") or []}
+            continue
+        if o.get("method") != "event":
+            continue
+        address, kind, data = p.get("terminal"), p.get("type"), p.get("data") or {}
+        if kind in ("created", "restarted"):
+            terminals[address] = data
+        elif kind == "removed":
+            terminals.pop(address, None)
+        elif address not in terminals:
+            continue
+        elif kind == "foreground":
+            terminals[address]["foreground"] = data
+        elif kind in ("finished", "lost"):
+            terminals[address].pop("foreground", None)
+        elif kind == "status":
+            t = terminals[address]
+            was, now = (t.get("status") or {}).get("state"), data.get("status") or {}
+            t["status"] = data.get("status")
+            # done は人が見ていない間に終わった印で、見ると idle になる。working からの変化だけが turn の終わり
+            # 他の machine の端末 ("<machine>/t7") は、その machine の watch が扱う
+            if (was == "working" and now.get("state") in ("done", "idle") and now.get("app") == "claude-code"
+                    and (t.get("foreground") or {}).get("name") == "sbx" and "/" not in address):
+                # stderr は watch の物を引き継ぐ: summarize が落ちた理由を service の journal に残す
+                jobs.append(subprocess.Popen(
+                    [sys.executable, __file__, "summarize", json.dumps({"terminal": address})],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    start_new_session=True, env={**os.environ, GUARD: "1"},
+                ))
+    sys.exit(f"task-notes: hc events ended ({events.wait()})")
+
+
 def main():
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     if command == "hook":
@@ -430,6 +513,8 @@ def main():
             pass
     elif command == "summarize":
         summarize(sys.argv[2])
+    elif command == "watch":
+        watch()
     elif command == "where" and len(sys.argv) > 2:
         # mod はこれが失敗すると pane の folder に落ちる。調べ終えた所までを、いつも JSON で返す
         place = dict.fromkeys(PLACE)
@@ -440,7 +525,7 @@ def main():
         place.pop("transcript", None)
         print(json.dumps(place, ensure_ascii=False))
     else:
-        print("usage: task-notes hook | summarize <job> | where <terminal>")
+        print("usage: task-notes hook | summarize <job> | watch | where <terminal>")
 
 
 if __name__ == "__main__":
