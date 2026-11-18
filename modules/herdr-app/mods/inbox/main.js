@@ -1,12 +1,14 @@
 // 自分の手を待っている物を 1 か所に並べるモーダル。key で選んで、開く、URL を copy する、session に貼る
 // 許可や返事を待っている agent、見ていない間に終わった agent、Slack の依頼、aw-secretary の commitment (自分への約束) のうち手を付けるべき物、自分の branch の pull request で落ちた CI
 // 中身を取りに行くのは ./feed.js と ./asks.js。開いていない間はタブバーと左バーの Agents の一覧が見に行き、ここは shared に置かれた物を読む
-// commitment だけは、開いた時にここで aw-secretary に聞き、答えもここに持つ
+// commitment だけは、開いた時にここで aw-secretary に聞き、答えもここに持つ。dialog の 2 つ目の面は commitment の一覧 (./commitments.js)
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { panes, focused, run, notify, theme, shared, props, closeOverlay } from "herdr";
 import { waiting, checking, refresh, ask } from "./feed.js";
 import { readAsks, askOf } from "./asks.js";
+import { Secretary, merge } from "./secretary.js";
+import { Commitments, WAITING, COLLECTING } from "./commitments.js";
 // aw-secretary の API の URL。使わない machine では null (nix が書く: ../../_show.nix)
 import { COMMITMENTS } from "./env.js";
 
@@ -14,8 +16,7 @@ import { COMMITMENTS } from "./env.js";
 const REASONS = { triage: ["triage", "accent"], overdue: ["overdue", "blocked"], due_soon: ["due soon", "working"], maybe_done: ["done?", "done"] };
 // commitment の行で状態を決める key。Slack の行では d と s は tick と skip
 const DECIDE = { a: "active", x: "rejected", d: "done", s: "later", w: "waiting" };
-// 答えを待っている間に key を押した時の note。答えが返ったら消す
-const WAITING = "Waiting for aw-secretary to answer";
+const FACE = { inbox: "Inbox", commitments: "Commitments" };
 
 // Slack の permalink を、aw-secretary の links の key (slack:<channel>:<thread の root の ts>) にする。返信の permalink は thread_ts の root に寄せる
 const slackKey = url => { const m = /\/archives\/([A-Z0-9]+)\/p(\d+)(\d{6})/.exec(url ?? ""); if (!m) return null; const t = /[?&]thread_ts=(\d+\.\d+)/.exec(url); return `slack:${m[1]}:${t ? t[1] : `${m[2]}.${m[3]}`}`; };
@@ -37,12 +38,24 @@ export default class Inbox extends View {
     this.handle.focus();
     // 開いた直後の focus は dialog の表示に奪われる事があるので、もう一度取る
     cx.timer.after(600, () => this.handle.focus());
-    // commitments は GET /commitments?view=inbox の答えで、読めるまで null
-    this.commitments = null; this.commitmentError = null; this.consulting = false;
+    // commitments は GET /commitments?view=inbox の答えで、読めるまで null。inboxStale は Commitments の面で書いた後の印で、この面を出す時に読み直す
+    this.commitments = null; this.commitmentError = null; this.inboxStale = false;
+    // URL の無い machine では Commitments の面を出さない
+    this.sec = new Secretary(COMMITMENTS);
+    this.faces = COMMITMENTS ? ["inbox", "commitments"] : ["inbox"];
+    this.face = "inbox";
+    this.cm = COMMITMENTS ? new Commitments(this, this.sec) : null;
     // 開いた時に取り直す。GitHub は前に見てから間が空いている時だけ
     refresh(cx);
     ask(cx);
-    this.consult(cx);
+    this.load(cx);
+  }
+
+  show(face, cx) {
+    if (!this.faces.includes(face)) return;
+    this.face = face;
+    if (face === "commitments") this.cm.show(cx);
+    else if (this.inboxStale) this.load(cx);
   }
 
   // head が見出しで、他は選べる行。url は copy と paste に使う物で、agent の行には無い。open は Enter で開く物が url と違う時だけ
@@ -97,55 +110,51 @@ export default class Inbox extends View {
     ask(cx, "/slack/items", { op, ids: [row.slack.permalink] });
   }
 
-  // aw-secretary に聞く。id が無ければ inbox の view を読むだけ。id があれば body で commitment を変え、変えた後の view を受け取る
-  // 聞くのは開いている Inbox の中で 1 度に 1 つで、答えが返るまで次を送らない。答えの順が入れ替わらず、続けて押した時に server で後の物が先に適用されない
-  // 答えを待ったまま閉じると、次に開いた Inbox はその答えを待たない
-  consult(cx, id, body) {
-    if (!COMMITMENTS || this.consulting) return;
-    this.consulting = true;
-    cx.spawn(async cx => {
-      try {
-        const r = await (id
-          ? fetch(`${COMMITMENTS}/commitments/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-          : fetch(`${COMMITMENTS}/commitments?view=inbox`));
-        if (r.ok) { this.commitments = await r.json(); this.commitmentError = null; }
-        else {
-          // 書けなかった時は前の view を残して error だけを出す。collect の最中の 503 は running: true が付くので、key を止める
-          const e = await r.json().catch(() => null);
-          this.commitmentError = e?.error ?? `aw-secretary answered ${r.status}`;
-          if (e?.running && this.commitments) this.commitments = { ...this.commitments, running: true };
-        }
-      } catch (e) { this.commitmentError = String(e?.message ?? e); }
-      finally {
-        this.consulting = false;
-        if (this.note === WAITING) this.note = null;
-        cx.notify();
-      }
-    });
+  load(cx) {
+    this.inboxStale = false;
+    this.sec.read(cx, "inbox", "/commitments?view=inbox", got => { this.commitments = merge(this.commitments, got); this.commitmentError = got.error; });
   }
 
-  // commitment の状態を決める。collect の最中は aw-secretary が書かせないので、送らない
+  // commitment の状態を決め、答えの inbox の view で置き換える。collect の最中は aw-secretary が書かせないので、送らない
   decide(cx, row, status) {
-    if (this.commitments?.running) this.note = "aw-secretary is collecting. Press r after it finishes, then try again";
-    else if (this.consulting) this.note = WAITING;
-    else this.consult(cx, row.commitment.id, { status });
+    if (this.commitments?.running) { this.note = COLLECTING; return; }
+    const id = row.commitment.id;
+    // Commitments の面の view と、その行の詳細は読み直す。答えを待つ間にその面へ移っていればすぐに、居なければその面を出す時に
+    const sent = this.sec.write(cx, `/commitments/${id}`, { status }, (got, cx) => {
+      if (this.note === WAITING) this.note = null;
+      this.commitments = merge(this.commitments, got); this.commitmentError = got.error;
+      if (!this.cm) return;
+      this.cm.stale = true; this.cm.details.delete(id);
+      if (this.face === "commitments") this.cm.show(cx);
+    });
+    if (!sent) this.note = WAITING;
   }
 
   key(e, cx, list, at) {
-    const m = e.modifiers ?? {}, k = e.key, row = list[at];
+    const m = e.modifiers ?? {}, k = e.key, row = list[at], cm = this.face === "commitments" ? this.cm : null;
     if (m.alt || m.platform) return;
     const plain = !m.control && !m.shift;
-    this.note = null;
-    if (k === "escape") closeOverlay(props().overlay);
-    else if (k === "enter") this.open(cx, row);
-    else if (k === "down" || k === "tab" && !m.shift || plain && k === "j" || m.control && (k === "j" || k === "n")) this.move(list, at, 1);
-    else if (k === "up" || k === "tab" || plain && k === "k" || m.control && (k === "k" || k === "p")) this.move(list, at, -1);
-    else if (plain && k === "y") this.copy(cx, row);
-    else if (plain && k === "p") this.paste(cx, row);
-    else if (plain && row?.commitment && Object.hasOwn(DECIDE, k)) this.decide(cx, row, DECIDE[k]);
-    else if (plain && k === "d") this.settle(cx, row, "tick");
-    else if (plain && k === "s") this.settle(cx, row, "skip");
-    else if (plain && k === "r") { refresh(cx, true); ask(cx); this.consult(cx); }
+    // 入力欄と、面の上に重ねた一覧には、その面が先に聞く。入力欄に流す key は止めない
+    if (cm?.typing || cm?.overlay) { if (!cm.modal(e, cx)) return; }
+    else {
+      this.note = null;
+      if (k === "escape" && cm?.filter) cm.refilter("", cx);
+      else if (k === "escape") closeOverlay(props().overlay);
+      else if (k === "tab" && !m.control) this.show(this.faces[(this.faces.indexOf(this.face) + 1) % this.faces.length], cx);
+      else if (plain && (k === "1" || k === "2")) this.show(this.faces[Number(k) - 1], cx);
+      // Commitments の面の書く key は、Ctrl 付きでは効かせない。Ctrl は移動だけ
+      else if (cm && m.control) { if (k === "j" || k === "n") cm.move(1, cx); else if (k === "k" || k === "p") cm.move(-1, cx); }
+      else if (cm) cm.key(e, cx);
+      else if (k === "enter") this.open(cx, row);
+      else if (k === "down" || plain && k === "j" || m.control && (k === "j" || k === "n")) this.move(list, at, 1);
+      else if (k === "up" || plain && k === "k" || m.control && (k === "k" || k === "p")) this.move(list, at, -1);
+      else if (plain && k === "y") this.copy(cx, row);
+      else if (plain && k === "p") this.paste(cx, row);
+      else if (plain && row?.commitment && Object.hasOwn(DECIDE, k)) this.decide(cx, row, DECIDE[k]);
+      else if (plain && k === "d") this.settle(cx, row, "tick");
+      else if (plain && k === "s") this.settle(cx, row, "skip");
+      else if (plain && k === "r") { refresh(cx, true); ask(cx); this.load(cx); }
+    }
     // 他の key も下の端末へは流さない
     cx.stop_propagation();
     cx.notify();
@@ -222,7 +231,7 @@ export default class Inbox extends View {
     if (row?.url) keys.push("y copy URL", "p paste to session");
     if (row?.slack) keys.push(...(row.slack.kind === "ask" ? ["d done", "s skip"] : ["s seen"]));
     if (row?.commitment) keys.push(...(collecting ? ["a/x/d/s/w wait until aw-secretary finishes collecting, then r"] : ["a adopt", "x reject", "d done", "s later", "w waiting"]));
-    return [...keys, "r refresh", "Esc close"].join(" · ");
+    return [...keys, "r refresh", ...(this.faces.length > 1 ? ["Tab face"] : []), "Esc close"].join(" · ");
   }
 
   render(cx) {
@@ -240,8 +249,10 @@ export default class Inbox extends View {
       const shown = rows.indexOf(sel);
       this.scroll.scroll_to_item(shown === 1 ? 0 : shown);
     }
-    const github = shared("inbox.github"), digest = shared("inbox.digest"), sl = digest?.state?.slack, cm = this.commitments;
-    const error = this.commitmentError ?? digest?.error ?? (sl && !sl.connected ? "Slack connector is not signed in" : sl?.error) ?? "";
+    const github = shared("inbox.github"), digest = shared("inbox.digest"), sl = digest?.state?.slack, face = this.face;
+    // 見出しの commitment の時刻と error は、出している面の view の物
+    const cm = face === "commitments" ? this.cm.view : this.commitments;
+    const error = (face === "commitments" ? this.cm.error : this.commitmentError) ?? digest?.error ?? (sl && !sl.connected ? "Slack connector is not signed in" : sl?.error) ?? "";
     const top = (id, label, action) => div().id(id).flex_none().px(6).h(22).flex().items_center().rounded(5).text_size(11).text_color(t.dim).cursor_pointer()
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => action(cx)).child(label);
     return v_flex().id("inbox").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx, list, at))
@@ -249,19 +260,22 @@ export default class Inbox extends View {
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .child(svg("mods/inbox/inbox.svg").size(14).text_color(t.muted))
         .child(div().font_semibold().child("Inbox"))
+        .when(this.faces.length > 1, el => el.child(div().w(4)).children(this.faces.map((f, i) => div().id(`in-face-${f}`).flex_none().px(8).h(24).flex().items_center()
+          .rounded(6).text_size(12).cursor_pointer().text_color(f === face ? t.foreground : t.muted).when(f === face, el => el.bg(t.selected)).hover(s => s.bg(t.hover))
+          .on_click((_e, cx) => { this.show(f, cx); this.handle.focus(); cx.notify(); }).child(`${i + 1} ${FACE[f]}`))))
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(error))
         .when(Boolean(sl), el => el.child(top("in-sweep", sl.running ? "sweeping…" : sl.lastAt ? `Slack ${ago(sl.lastAt)}` : "Slack", cx => ask(cx, "/slack/sweep"))))
         // collect の最中は commitment を変えられない
-        .when(Boolean(cm) || this.consulting, el => el.child(div().flex_none().px(6).text_size(11).text_color(cm?.running ? t.working : t.dim)
+        .when(Boolean(cm) || Boolean(COMMITMENTS) && this.sec.busy, el => el.child(div().flex_none().px(6).text_size(11).text_color(cm?.running ? t.working : t.dim)
           .child(!cm ? "Commitments…" : cm.running ? "collecting…" : cm.lastCollectAt ? `Commitments ${ago(Date.parse(cm.lastCollectAt))}` : "Commitments")))
         .child(top("in-reload", checking() ? "checking…" : github?.at ? `GitHub ${ago(github.at)}` : "GitHub", cx => refresh(cx, true))))
-      .child(rows.length
+      .child(face === "commitments" ? this.cm.render(t, this.handle) : rows.length
         ? v_flex().id("in-body").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.scroll).px(14).pb(12).pt(6).gap(6)
           .children(rows.map(row => row.head ? div().pt(6).text_size(11).font_semibold().text_color(t.muted).child(row.head)
             : row.slack ? this.slack(t, row, row === sel) : this.card(t, row, row === sel)))
         : div().flex_1().p(16).text_color(t.dim).child("Nothing needs you"))
-      .when(Boolean(digest?.state), el => el.child(this.standup(t, digest.state.standup)))
+      .when(face === "inbox" && Boolean(digest?.state), el => el.child(this.standup(t, digest.state.standup)))
       .child(div().flex_none().px(14).py(7).border_t(1).border_color(t.border).truncate().text_size(11).text_color(this.note ? t.muted : t.dim)
-        .child(this.note ?? this.hint(sel, cm?.running)));
+        .child(this.note ?? (face === "commitments" ? this.cm.hint() : this.hint(sel, cm?.running))));
   }
 }
