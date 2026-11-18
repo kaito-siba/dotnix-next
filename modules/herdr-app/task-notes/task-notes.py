@@ -1,12 +1,16 @@
 """herdr の tab ごとに、そこで動く Claude Code が何をしているかの要約を書く。
 
   task-notes hook        Claude Code の Stop hook。裏で summarize を始めて、すぐに返る
-  task-notes summarize   その裏の仕事 (hook が起動する)
+  task-notes summarize   その裏の仕事 (hook と watch が起動する)
+  task-notes watch       sbx の sandbox の中の Claude Code の turn の終わりを、host で見張る
+  task-notes where <t>   端末 t の agent が今居る folder を JSON で出す (herdr-app の mod が呼ぶ)
 
 要約は $XDG_STATE_HOME/task-notes/<tab の id>.json に置き、herdr-app の tasks mod が読む。
 最初の要約は、ファイルを書き換えた turn の後に作る。要約のある tab では、turn のたびに
 Haiku を 1 回走らせて前の要約を更新する (会話や command だけの turn でも step は進む)。
 herdr の端末の外 (HC_TERMINAL_ID が無い) では何もしない。
+sandbox の中には task-notes も hc も Stop hook も無いので、そこの turn は watch が
+host の hc events から見つけ、transcript を探して summarize に渡す。
 """
 
 import fcntl
@@ -15,6 +19,8 @@ import os
 import subprocess
 import sys
 import time
+import unicodedata
+from datetime import datetime
 from pathlib import Path
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
@@ -27,6 +33,14 @@ BUDGET = 12000
 # そのうち、agent の最後の発言 (報告) に使う分
 REPORT = 3000
 CUT = "[…]"
+# Claude Code が transcript に残す session の名前の entry と、その値の key。端末の title にも同じ物を出す
+TITLES = {"ai-title": "aiTitle", "custom-title": "customTitle"}
+# session に名前が付くまで、Claude Code が端末に出す title
+UNTITLED = "Claude Code"
+# sbx ls は 0.5 秒ほどかかる。mod を開くたびに呼ばれるので、答えをこの秒数だけ覚えておく
+SANDBOX_TTL = 600
+# where が出す key
+PLACE = ("cwd", "root", "branch", "source", "session")
 
 SCHEMA = {
     "type": "object",
@@ -97,8 +111,168 @@ def where(terminal):
     return {"tab": tab, "title": labels.get("where") or tab} if tab else None
 
 
-def last_turn(transcript):
-    """人が最後に打った prompt から後の message。"""
+def clean(title):
+    """agent が title の前に付ける状態の印 ("✳ ", "⠋ - ") を落とす。tasks mod の clean と同じ。"""
+    title = title or ""
+    at = 0
+    while at < len(title) and not (title[at].isalnum() or unicodedata.category(title[at]) in ("Ps", "Pi")):
+        at += 1
+    return title[at:].strip()
+
+
+def started(pid):
+    """process が起動した時刻 (epoch 秒)。ps の etime は "[[dd-]hh:]mm:ss" の形。"""
+    out = run(["ps", "-o", "etime=", "-p", str(pid)]) if pid else None
+    if not out:
+        return None
+    days, _, clock = out.rpartition("-")
+    try:
+        seconds = 0
+        for part in clock.split(":"):
+            seconds = seconds * 60 + int(part)
+        seconds += int(days or 0) * 86400
+    except ValueError:
+        return None
+    return time.time() - seconds
+
+
+def sandbox_projects():
+    """sandbox の中の ~/.claude/projects を mount した、host の folder。"""
+    cache = STATE / "sandbox-projects.json"
+    try:
+        if time.time() - cache.stat().st_mtime < SANDBOX_TTL:
+            return json.loads(cache.read_text())
+    except (OSError, ValueError):
+        pass
+    try:
+        boxes = json.loads(run(["sbx", "ls", "--json"]) or "")
+    except ValueError:
+        return []
+    # mount は "host の path:中の path" の形で、後ろに ":ro" が付く事がある
+    dirs = sorted({m.split(":")[0] for box in boxes for m in box.get("mounts") or [] if m.split(":")[1:2] and m.split(":")[1].endswith("/.claude/projects")})
+    try:
+        write_atomic(cache, json.dumps(dirs))
+    except OSError:
+        # write_atomic の一時 file は名前が決まっているので、同時に走る where と取り合う事がある。覚えるのは次の呼び出しに任せる
+        pass
+    return dirs
+
+
+def tail(transcript):
+    """transcript の最後の user の entry と、最後の title の entry。末尾から読み、揃わなければ読む範囲を広げる。"""
+    size = os.path.getsize(transcript)
+    span = 1 << 16
+    while True:
+        with open(transcript, "rb") as f:
+            f.seek(max(0, size - span))
+            lines = f.read().splitlines()
+        if span < size:
+            # 途中から読んだので、最初の行は欠けている
+            lines = lines[1:]
+        found = {}
+        for line in reversed(lines):
+            for kind in ("user", *TITLES):
+                if kind in found or f'"type":"{kind}"'.encode() not in line:
+                    continue
+                try:
+                    o = json.loads(line)
+                except ValueError:
+                    continue
+                if o.get("type") == kind:
+                    found[kind] = o
+        if span >= size or ("user" in found and found.keys() & TITLES.keys()):
+            return found
+        span *= 8
+
+
+def begun(transcript):
+    """transcript の最初の entry の時刻 (epoch 秒)。"""
+    with open(transcript) as f:
+        for line in f:
+            try:
+                stamp = json.loads(line).get("timestamp")
+            except ValueError:
+                continue
+            if stamp:
+                return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+    return None
+
+
+def sandbox_session(terminal, fg):
+    """sbx の端末で動く Claude Code の transcript と、その最新の user の entry の cwd。
+
+    sandbox の中の session は host の pid から引けない (中の sessions/ は sandbox の間で
+    共有され、pid がぶつかる)。端末の title と、transcript に残る最後の title を突き合わせる。
+    session に名前がまだ無い最初の turn は、sbx の起動より後に始まった title の無い transcript で代える。
+    当てはまる session が 2 つ以上あれば、どれがこの端末の物か決められないので None を返す。
+    EnterWorktree した session は transcript が worktree の名前の folder へ移る事があるので、
+    folder は決め打ちしない。cwd は user の entry の物を使う: assistant の entry は、Bash の
+    cd で一時だけ下の階層に揺れる事がある。
+    """
+    start, root, title = started(fg.get("pid")), fg.get("cwd") or "", clean(terminal.get("title"))
+    # 順位ごとの、session id から (mtime, path, cwd)
+    picks = {}
+    for projects in sandbox_projects():
+        for path in Path(projects).glob("*/*.jsonl"):
+            try:
+                mtime = path.stat().st_mtime
+                if start and mtime < start:
+                    continue
+                found = tail(path)
+                cwd = (found.get("user") or {}).get("cwd") or ""
+                # sbx は workspace の root で動く。そこと上下の関係に無い folder の session は他の sandbox の物
+                if not cwd or not (cwd == root or cwd.startswith(root + "/") or root.startswith(cwd + "/")):
+                    continue
+                titles = {clean(found[kind].get(key)) for kind, key in TITLES.items() if kind in found} - {""}
+                if title in titles:
+                    rank = 2
+                elif title == UNTITLED and not titles and start and (begun(path) or 0) >= start:
+                    rank = 1
+                else:
+                    continue
+            except (OSError, ValueError):
+                continue
+            same = picks.setdefault(rank, {})
+            if path.stem not in same or mtime > same[path.stem][0]:
+                same[path.stem] = (mtime, path, cwd)
+    top = picks[max(picks)] if picks else {}
+    if len(top) != 1:
+        return None
+    _, path, cwd = next(iter(top.values()))
+    return {"cwd": cwd, "session": path.stem, "transcript": str(path)}
+
+
+def locate(terminal, place=None):
+    """端末の agent が今居る folder と、そこの git の toplevel と branch。
+
+    hc の cwd は端末を作った時の folder のままなので、foreground の process の cwd を見る。
+    Claude Code が EnterWorktree すると、host の process の cwd は worktree へ移る。sbx の
+    process の cwd は workspace の root から動かないので、sandbox の中の agent は transcript で見る。
+    調べる途中で例外が出ても、place には調べ終えた所までが入っている。
+    """
+    if place is None:
+        place = dict.fromkeys(PLACE)
+    out = run(["hc", "get", terminal, "--json"])
+    if not out:
+        return place
+    t = json.loads(out)
+    fg = t.get("foreground") or {}
+    place.update(cwd=fg.get("cwd") or t.get("cwd"), source="pane")
+    # nix で入れた claude は ".claude-wrapped" という名前で動く
+    if "claude" in (fg.get("name") or "") or os.path.basename((fg.get("argv") or [""])[0]) == "claude":
+        sessions = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "sessions"
+        place.update(source="claude", session=(read_json(sessions / f"{fg.get('pid')}.json") or {}).get("sessionId"))
+    elif fg.get("name") == "sbx":
+        place["source"] = "sbx"
+        place.update(sandbox_session(t, fg) or {})
+    if place["cwd"]:
+        place["root"] = run(["git", "rev-parse", "--show-toplevel"], place["cwd"]) or None
+        place["branch"] = place["root"] and (run(["git", "branch", "--show-current"], place["cwd"]) or None)
+    return place
+
+
+def last_turn(transcript, since=None):
+    """人が最後に打った prompt から後の message。since (prompt の uuid) を渡すと、その prompt から次の prompt の前まで。"""
     messages = []
     for line in Path(transcript).read_text().splitlines():
         try:
@@ -112,6 +286,10 @@ def last_turn(transcript):
         content = o["message"].get("content")
         return o["type"] == "user" and (isinstance(content, str) or any(c.get("type") == "text" for c in content))
 
+    at = next((n for n, o in enumerate(messages) if since and o.get("uuid") == since), None)
+    if at is not None:
+        end = next((n for n in range(at + 1, len(messages)) if is_prompt(messages[n])), len(messages))
+        return messages[at:end]
     start = len(messages) - 1
     while start > 0 and not is_prompt(messages[start]):
         start -= 1
@@ -201,14 +379,41 @@ def hook():
     )
 
 
+def settle(transcript, quiet=3, limit=20):
+    """transcript への書き込みが、呼んだ時から数えて quiet 秒止まるまで待つ (長くても limit 秒)。
+
+    呼んだ時に止まっていても待つ: 最後の発言は、turn が終わってから書かれる事がある。
+    """
+    begin = time.time()
+    while (now := time.time()) < begin + limit:
+        try:
+            idle = now - max(os.path.getmtime(transcript), begin)
+        except OSError:
+            return
+        if idle >= quiet:
+            return
+        time.sleep(quiet - idle)
+
+
 def summarize(job):
     job = json.loads(job)
     at = where(job["terminal"])
     if not at:
         return
+    if not job.get("transcript"):
+        # watch から来た sbx の端末。sandbox の中の agent の最後の発言は hook から受け取れないが、
+        # digest は report が空なら transcript の最後の発言を使う。transcript は turn の終わりより
+        # 遅れて書かれるので、書き終わるのを待ってから読む。待つ間に次の prompt が来ても
+        # 終わった turn を読めるよう、その turn の prompt は待つ前に決めておく
+        place = locate(job["terminal"])
+        if place["source"] != "sbx" or not place.get("transcript"):
+            return
+        turn = last_turn(place["transcript"])
+        settle(place["transcript"])
+        job.update(transcript=place["transcript"], cwd=place["cwd"], since=turn[0].get("uuid") if turn else None)
     out = STATE / f"{at['tab']}.json"
     # 待つ前に読む: 待っている間に次の turn が始まると、最後の turn が入れ替わる
-    text, edits, plans = digest(last_turn(job["transcript"]), job.get("report") or "")
+    text, edits, plans = digest(last_turn(job["transcript"], job.get("since")), job.get("report") or "")
     # 前の turn の要約がまだ走っていたら、終わるのを待つ。飛ばすと、すぐ後に
     # 終わった turn (短い返事など) が要約に入らない
     STATE.mkdir(parents=True, exist_ok=True)
@@ -249,6 +454,55 @@ def summarize(job):
         }, ensure_ascii=False, indent=2))
 
 
+def watch():
+    """hc events を追い、sbx の端末で Claude Code の turn が終わったら summarize を始める。
+
+    host で動く Claude Code は Stop hook が summarize を始めるので、ここでは扱わない。
+    hc events が切れたら (core の再起動など) 非 0 で終わり、service の再起動に任せる。
+    """
+    events = subprocess.Popen(["hc", "events", "--json"], stdout=subprocess.PIPE, text=True)
+    terminals, jobs = {}, []
+    for line in events.stdout:
+        jobs = [j for j in jobs if j.poll() is None]
+        try:
+            o = json.loads(line)
+        except ValueError:
+            continue
+        p = o.get("params") or {}
+        # 最初の行と、追い付けなかった時に来る missed は、全ての端末の snapshot
+        if "terminals" in o or o.get("method") == "missed":
+            terminals = {t["address"]: t for t in (o if "terminals" in o else p).get("terminals") or []}
+            continue
+        if o.get("method") != "event":
+            continue
+        address, kind, data = p.get("terminal"), p.get("type"), p.get("data") or {}
+        if kind in ("created", "restarted"):
+            terminals[address] = data
+        elif kind == "removed":
+            terminals.pop(address, None)
+        elif address not in terminals:
+            continue
+        elif kind == "foreground":
+            terminals[address]["foreground"] = data
+        elif kind in ("finished", "lost"):
+            terminals[address].pop("foreground", None)
+        elif kind == "status":
+            t = terminals[address]
+            was, now = (t.get("status") or {}).get("state"), data.get("status") or {}
+            t["status"] = data.get("status")
+            # done は人が見ていない間に終わった印で、見ると idle になる。working からの変化だけが turn の終わり
+            # 他の machine の端末 ("<machine>/t7") は、その machine の watch が扱う
+            if (was == "working" and now.get("state") in ("done", "idle") and now.get("app") == "claude-code"
+                    and (t.get("foreground") or {}).get("name") == "sbx" and "/" not in address):
+                # stderr は watch の物を引き継ぐ: summarize が落ちた理由を service の journal に残す
+                jobs.append(subprocess.Popen(
+                    [sys.executable, __file__, "summarize", json.dumps({"terminal": address})],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    start_new_session=True, env={**os.environ, GUARD: "1"},
+                ))
+    sys.exit(f"task-notes: hc events ended ({events.wait()})")
+
+
 def main():
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     if command == "hook":
@@ -259,8 +513,19 @@ def main():
             pass
     elif command == "summarize":
         summarize(sys.argv[2])
+    elif command == "watch":
+        watch()
+    elif command == "where" and len(sys.argv) > 2:
+        # mod はこれが失敗すると pane の folder に落ちる。調べ終えた所までを、いつも JSON で返す
+        place = dict.fromkeys(PLACE)
+        try:
+            locate(sys.argv[2], place)
+        except Exception:
+            pass
+        place.pop("transcript", None)
+        print(json.dumps(place, ensure_ascii=False))
     else:
-        print("usage: task-notes hook | summarize <job>")
+        print("usage: task-notes hook | summarize <job> | watch | where <terminal>")
 
 
 if __name__ == "__main__":

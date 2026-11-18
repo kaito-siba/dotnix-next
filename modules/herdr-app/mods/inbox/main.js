@@ -219,6 +219,7 @@ export default class Inbox extends View {
         .when(Boolean(d.bullets.length), el => el.child(this.chip(t, "in-su-copy", this.copied === text ? "Copied" : "Copy", cx => { cx.write_to_clipboard(text); this.copied = text; cx.notify(); })))
         .when(!d.running, el => el.child(this.chip(t, "in-su-write", "Write now", cx => ask(cx, "/standup/write")))))
       .when(Boolean(d.error), el => el.child(div().text_size(11).text_color(t.blocked).child(d.error)))
+      .when(Boolean(d.note), el => el.child(div().text_size(11).text_color(t.working).child(d.note)))
       .child(d.bullets.length
         ? v_flex().id("in-su-body").max_h(200).overflow_y_scrollbar().gap(3).children(d.bullets.map(b => h_flex().gap(6).items_start().text_size(12)
           .child(div().flex_none().text_color(t.dim).child("•")).child(div().flex_1().min_w(0).child(b))))

@@ -1,10 +1,11 @@
-// focus している pane の folder から file を辿る dialog。辿り方と preview は sandbox の Files と同じ (./browser.js)
+// focus している pane の agent が今居る folder (agent が居なければ pane の folder) から file を辿る dialog。辿り方と preview は sandbox の Files と同じ (./browser.js)
 // Enter は file を開く: 文字として読める物は新しい tab の editor で、他は OS の既定の app で
 // p は path を、開く前に focus していた端末の prompt に貼る
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, panes, focused, exec, run, notify, theme, window, props, closeOverlay } from "herdr";
+import { panes, focused, exec, run, notify, theme, window, props, closeOverlay } from "herdr";
 import { Browser, parse } from "./browser.js";
+import { location, where } from "./where.js";
 
 const POLL = 5000;
 const EDITOR = "nvim";
@@ -25,12 +26,6 @@ fi`;
 // 開いた app が、dialog を閉じた時に道連れにならないよう切り離す。$1 が開く command、$2 が file
 const OPEN = `nohup "$1" "$2" >/dev/null 2>&1 &`;
 
-function location() {
-  const space = spaces().find(s => s.active), f = focused();
-  const pane = f?.pane ? panes().find(p => p.pane === f.pane) : null;
-  return { cwd: pane?.cwd || f?.cwd || space?.folder, on: space?.machine ?? null };
-}
-
 const last = text => text.trim().split("\n").pop();
 
 export default class Explorer extends View {
@@ -39,7 +34,8 @@ export default class Explorer extends View {
     const on = this.loc.on;
     this.handle = cx.focus_handle();
     this.browser = new Browser({
-      id: "ex", copies: COPIES, dir: this.loc.cwd ?? "/", focus: () => this.handle.focus(),
+      // 開く folder は where で決まる。決まるまでは何も読まない
+      id: "ex", copies: COPIES, dir: null, focus: () => this.handle.focus(),
       source: {
         list: async dir => {
           const r = await exec("sh", ["-c", LIST, "ls", dir], { on });
@@ -57,7 +53,11 @@ export default class Explorer extends View {
     // 開いた直後の focus は dialog の表示に奪われる事があるので、もう一度取る
     cx.timer.after(600, () => this.handle.focus());
     cx.timer.every(POLL, cx => this.browser.reload(cx));
-    cx.spawn(async cx => { await Browser.sweep(COPIES); this.browser.reload(cx); });
+    cx.spawn(async cx => {
+      [, this.loc] = await Promise.all([Browser.sweep(COPIES), where(this.loc)]);
+      this.browser.dir = this.loc.cwd ?? "/";
+      this.browser.reload(cx);
+    });
   }
 
   async close() { await this.browser.close(); }

@@ -163,7 +163,8 @@ in
 
         # app は mod を読む時に、その folder へ jsconfig.json と gpui-kit.d.ts を
         # 書き出す。folder ごと store への link にすると書けないので、recursive で
-        # ファイル単位の link にする。
+        # ファイル単位の link にする。import される module は link では読めないので、
+        # where.js は ./_show.nix の木からコピーする。
         xdg.configFile."herdr-app/mods/scratchpad" = {
           source = ./mods/scratchpad;
           recursive = true;
