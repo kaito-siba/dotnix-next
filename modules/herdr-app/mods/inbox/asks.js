@@ -1,6 +1,6 @@
 // 返事を待っている agent の画面の最後を読んで、質問の抜粋を shared の "inbox.asks" に { [address]: { seq, text, at } } で置く
 // text が null の間は、at (ms) に読み始めて、まだ読み終えていない。どちらの mod が読んでいるかは問わない
-// 2 つの mod が読み込む (../../_show.nix が両方へ写す)
+// 2 つの mod が読み込む (../../_app-home.nix が両方へ写す)
 //   cheki-agents  いつも出ている左バーの Agents の一覧。止まった agent をすぐ読みに行き、行の下に抜粋を出す
 //   inbox         開いている間だけ生きるモーダル (./main.js)。置かれた抜粋を使い、無い時だけ自分で読みに行く
 import { hc, shared, setShared } from "herdr";

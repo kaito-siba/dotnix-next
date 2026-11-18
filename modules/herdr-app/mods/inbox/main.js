@@ -9,7 +9,7 @@ import { waiting, checking, refresh } from "./feed.js";
 import { readAsks, askOf } from "./asks.js";
 import { Secretary, merge } from "./secretary.js";
 import { Commitments, WAITING, COLLECTING } from "./commitments.js";
-// aw-secretary の API の URL。使わない machine では null (nix が書く: ../../_show.nix)
+// aw-secretary の API の URL。使わない machine では null (nix が書く: ../../_app-home.nix)
 import { COMMITMENTS } from "./env.js";
 
 // commitment が Inbox に出ている訳 (reason) の見出しと、行の印の色

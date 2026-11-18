@@ -2,11 +2,7 @@
   lib,
   runCommand,
   fetchurl,
-  writeShellApplication,
   writeText,
-  coreutils,
-  fontconfig,
-  imagemagick,
   jq,
   python3,
   # 同梱の layout / mod を写す元の tag。_package.nix の version と揃える。
@@ -16,24 +12,9 @@
   commitmentsUrl ? null,
 }:
 let
-  # Show パネルに物を置き、注釈を焼き込むコマンド。mod からも端末からも
-  # (つまりエージェントからも) 同じ物を呼ぶ。
-  show = writeShellApplication {
-    name = "show";
-
-    runtimeInputs = [
-      coreutils
-      fontconfig
-      imagemagick
-      jq
-    ];
-
-    text = builtins.readFile ./show/show.sh;
-  };
-
   # app 同梱の layout と mod は起動のたびに上書きされ、手を入れられない
   # (defaults/AGENTS.md)。手を入れた写しを自分の名前で持つ: main layout の写しが
-  # lycoreco、tabs と workspace-chrome と pane の写しが show-tabs と bare-chrome と
+  # lycoreco、tabs と workspace-chrome と pane の写しが panel-tabs と bare-chrome と
   # titled-pane。agents は継承して cheki-agents にする (下の組み立て)。写しを
   # repo に置くと bump のたびに写し直しになるので、同じ tag の原本を取ってきて
   # 差分だけ当てる。原本が変わって差分が当たらなくなったら build が落ちる。
@@ -71,34 +52,22 @@ let
   # チェキの下の縁の字を、傾けた svg にする (./mods/cheki-agents/memo.py)。
   memoPython = python3.withPackages (ps: [ ps.fonttools ]);
 
-  # mod は store のパスを知らないので、呼ぶコマンドを module として渡す。
-  env = writeText "herdr-show-env.js" ''
-    export const SHOW = "${lib.getExe show}";
-  '';
-
   # mod は nix の設定を知らないので、module として渡す。inbox と、その中身を
-  # 取りに行く show-tabs の両方に置く。
+  # 取りに行く panel-tabs の両方に置く。
   inboxEnv = writeText "herdr-inbox-env.js" ''
     export const COMMITMENTS = ${builtins.toJSON commitmentsUrl};
   '';
 in
 # ~/.config/herdr-app にそのまま重ねる木。
-runCommand "herdr-app-show"
+runCommand "herdr-app-home"
   {
     nativeBuildInputs = [
       jq
       memoPython
     ];
-    passthru = { inherit show; };
   }
   ''
-    mkdir -p $out/layouts $out/mods/show $out/mods/inbox $out/mods/explorer $out/mods/sandbox $out/mods/show-tabs $out/mods/cheki-agents $out/mods/bare-chrome $out/mods/titled-pane
-
-    install -m644 ${./show/main.js} $out/mods/show/main.js
-    install -m644 ${./show/mod.json} $out/mods/show/mod.json
-    install -m644 ${./show/show.svg} $out/mods/show/show.svg
-    install -m644 ${./show/send.svg} $out/mods/show/send.svg
-    install -m644 ${env} $out/mods/show/env.js
+    mkdir -p $out/layouts $out/mods/inbox $out/mods/explorer $out/mods/sandbox $out/mods/panel-tabs $out/mods/cheki-agents $out/mods/bare-chrome $out/mods/titled-pane
 
     # Inbox: 自分の手を待っている物を並べるモーダル。mod が import する module
     # (feed.js と asks.js と secretary.js と commitments.js と env.js) は link では
@@ -129,29 +98,29 @@ runCommand "herdr-app-show"
       install -Dm644 ${./task-notes/where.js} $out/mods/$mod/where.js
     done
 
-    # layout: 右パネルの stack から files を外して (explorer で見る) show と tasks を足し、タブバーと Agents の一覧と sidebar
+    # layout: 右パネルの stack を tasks だけにし (files は explorer で見る)、タブバーと Agents の一覧と sidebar
     # の頭と pane の header を写しに差し替える。sidebar の足 (Settings と Add machine) は外す:
     # どちらも key と palette から開ける。sidebar の spaces の一覧も外す: space は
     # navigator (./mods/navigator) で移る。
     jq '
-      (.. | objects | select(.id? == "tabs") | .content.mod) = "show-tabs"
+      (.. | objects | select(.id? == "tabs") | .content.mod) = "panel-tabs"
       | (.. | objects | select(.id? == "agents") | .content.mod) = "cheki-agents"
       | (.. | objects | select(.id? == "brand") | .content.mod) = "bare-chrome"
       | (.. | objects | select(.id? == "main") | .content.pane.header.content.mod) = "titled-pane"
       | (.. | objects | select(.id? == "sidebar") | .children) |= map(select(.id != "sidebar-footer"))
       | (.. | objects | select(.id? == "sidebar-lists") | .children) |= map(select(.id != "spaces"))
       | (.. | objects | select(.id? == "panel-body"))
-          |= (.active = "changes" | .children |= map(select(.id != "files")) + (["show", "tasks"] | map({id: ., type: "block", content: {mod: .}})))
+          |= (.active = "tasks" | .children = [{id: "tasks", type: "block", content: {mod: "tasks"}}])
     ' ${mainLayout} > $out/layouts/lycoreco.json
     jq -e '
-      [.. | objects | select(.id? == "tabs") | .content.mod] == ["show-tabs"]
+      [.. | objects | select(.id? == "tabs") | .content.mod] == ["panel-tabs"]
       and [.. | objects | select(.id? == "agents") | .content.mod] == ["cheki-agents"]
       and [.. | objects | select(.id? == "brand") | .content.mod] == ["bare-chrome"]
       and [.. | objects | select(.id? == "main") | .content.pane.header.content.mod] == ["titled-pane"]
       and ([.. | objects | select(.id? == "sidebar-footer")] | length == 0)
       and [.. | objects | select(.id? == "sidebar-lists") | .children[].id] == ["agents"]
-      and [.. | objects | select(.id? == "panel-body") | .children[].id] == ["changes", "show", "tasks"]
-      and [.. | objects | select(.id? == "panel-body") | .active] == ["changes"]
+      and [.. | objects | select(.id? == "panel-body") | .children[].id] == ["tasks"]
+      and [.. | objects | select(.id? == "panel-body") | .active] == ["tasks"]
     ' $out/layouts/lycoreco.json > /dev/null
 
     # sidebar の頭: logo と app の名前の代わりに、今の space の名前を出す。spaces の
@@ -219,14 +188,14 @@ runCommand "herdr-app-show"
       -2 $out/mods/cheki-agents
     echo '{ "place": "none", "title": "Agents" }' > $out/mods/cheki-agents/mod.json
 
-    # タブバー: Files のボタンを外し、Changes の隣に Show と Tasks のボタンを足す。
-    # 開いていたパネルを space ごとに覚える処理にもそれらを通す。その隣に Inbox を開く
+    # タブバー: Files と Changes のボタンを外し、Tasks のボタンを足す。開いていた
+    # パネルを space ごとに覚える処理も Tasks だけを通す。その隣に Inbox を開く
     # ボタンも足す。Inbox の中身を数分おきに取りに行くのもここ (./mods/inbox/feed.js):
     # モーダルは開いている間しか生きていないので、いつも出ているタブバーに持たせる。
-    { echo 'import { start as startInbox, button as inboxButton } from "./inbox.js";'; cat ${tabsMod}; } > $out/mods/show-tabs/main.js
-    install -m644 ${./mods/inbox/feed.js} $out/mods/show-tabs/inbox.js
-    install -m644 ${inboxEnv} $out/mods/show-tabs/env.js
-    substituteInPlace $out/mods/show-tabs/main.js \
+    { echo 'import { start as startInbox, button as inboxButton } from "./inbox.js";'; cat ${tabsMod}; } > $out/mods/panel-tabs/main.js
+    install -m644 ${./mods/inbox/feed.js} $out/mods/panel-tabs/inbox.js
+    install -m644 ${inboxEnv} $out/mods/panel-tabs/env.js
+    substituteInPlace $out/mods/panel-tabs/main.js \
       --replace-fail \
         'init() {' \
         'init(_props, cx) { startInbox(cx);' \
@@ -235,9 +204,9 @@ runCommand "herdr-app-show"
         'const enabled = (shared("workspace.panels") ?? ["changes"]).filter(p => p !== "files");' \
       --replace-fail \
         'enabled.includes(stored) ? stored : null' \
-        '(["show", "tasks"].includes(stored) || enabled.includes(stored)) ? stored : null' \
+        'stored === "tasks" ? stored : null' \
       --replace-fail \
         '.when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))' \
-        '.when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg"))).child(panelButton("show", "Show", "mods/show/show.svg")).child(panelButton("tasks", "Tasks", "mods/tasks/tasks.svg")).child(inboxButton(t))'
-    echo '{ "place": "none", "title": "Tabs" }' > $out/mods/show-tabs/mod.json
+        '.child(panelButton("tasks", "Tasks", "mods/tasks/tasks.svg")).child(inboxButton(t))'
+    echo '{ "place": "none", "title": "Tabs" }' > $out/mods/panel-tabs/mod.json
   ''

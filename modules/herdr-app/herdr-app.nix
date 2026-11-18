@@ -19,13 +19,10 @@ in
       herdr-core = pkgs.callPackage ./_core.nix { };
       herdr-app = pkgs.callPackage ./_package.nix { inherit herdr-core; };
 
-      # Show: セッションの横に、エージェントが `show <file>` で送ってきた物
-      # (主にスクリーンショット) を並べる右パネル。開いて注釈を描き、その
-      # コピーを保存したり prompt に貼り戻したりできる。中身は ./show、
-      # 組み立ては ./_show.nix。Show を足した layout (lycoreco) もここで作る。
+      # app home に重ねる layout (lycoreco) と mod の木。組み立ては ./_app-home.nix。
       # Agents の一覧の下のチェキには絵を入れられる: 画像は repo に入れず、
       # ~/.config/herdr-app/backgrounds/sidebar.png に置く (./mods/cheki-agents)。
-      show = pkgs.callPackage ./_show.nix {
+      appHome = pkgs.callPackage ./_app-home.nix {
         appVersion = herdr-app.version;
         commitmentsUrl = cfg.commitmentsUrl;
       };
@@ -131,7 +128,6 @@ in
         home.packages = [
           herdr-core
           herdr-app
-          show.show
         ];
 
         # mod と layout は symlink では置けない: app は mod の asset を app home
@@ -141,10 +137,10 @@ in
         #   herdr-app do layout.switch --name lycoreco
         # link の張り替えの後に動かす: 前の世代が同じ場所に link を置いていると、
         # 中身が同じに見えてコピーを飛ばし、その後で link だけが消される。
-        home.activation.installHerdrAppShow = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+        home.activation.installHerdrAppHome = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
           app_home="${config.xdg.configHome}/herdr-app"
           (
-            cd ${show}
+            cd ${appHome}
             ${pkgs.findutils}/bin/find . -type f -print0 | while IFS= read -r -d "" file; do
               if ! ${pkgs.diffutils}/bin/cmp -s "$file" "$app_home/$file"; then
                 run ${pkgs.coreutils}/bin/install -Dm644 "$file" "$app_home/$file"
@@ -156,7 +152,7 @@ in
         # app は mod を読む時に、その folder へ jsconfig.json と gpui-kit.d.ts を
         # 書き出す。folder ごと store への link にすると書けないので、recursive で
         # ファイル単位の link にする。import される module は link では読めないので、
-        # where.js は ./_show.nix の木からコピーする。
+        # where.js は ./_app-home.nix の木からコピーする。
         xdg.configFile."herdr-app/mods/scratchpad" = {
           source = ./mods/scratchpad;
           recursive = true;
@@ -173,8 +169,8 @@ in
           source = ./mods/navigator;
           recursive = true;
         };
-        # 右パネルの Tasks。layout とタブバーへの組み込みは ./_show.nix、出す要約を
-        # 書く側は ./task-notes.nix。Inbox (./mods/inbox) は ./_show.nix が置く。
+        # 右パネルの Tasks。layout とタブバーへの組み込みは ./_app-home.nix、出す要約を
+        # 書く側は ./task-notes.nix。Inbox (./mods/inbox) は ./_app-home.nix が置く。
         xdg.configFile."herdr-app/mods/tasks" = {
           source = ./mods/tasks;
           recursive = true;

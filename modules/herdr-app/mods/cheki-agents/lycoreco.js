@@ -1,5 +1,5 @@
 // 左バーの Agents (./main.js) と右パネルの Tasks (../tasks) が分け合う、色と字と状態の印
-// mod は自分の folder の外を import できないので、nix がこの file を使う mod の folder へコピーする (../../_show.nix)
+// mod は自分の folder の外を import できないので、nix がこの file を使う mod の folder へコピーする (../../_app-home.nix)
 import { div, svg } from "gpui-kit";
 
 // cheki-agents の ./fonts に同梱する M PLUS Rounded 1c。app が mod の fonts から読む。font の中の family の名前は "Rounded Mplus 1c"
