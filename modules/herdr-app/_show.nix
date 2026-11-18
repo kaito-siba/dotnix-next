@@ -13,8 +13,8 @@
   # inbox (./mods/inbox) が Slack の依頼と standup の下書きを読む、work-digest の
   # API の URL。無ければ null。
   workDigestUrl ? null,
-  # inbox が commitment (自分への約束) を読み書きする、aw-secretary の API の URL。
-  # 無ければ null。
+  # inbox が commitment (自分への約束) を読み書きし、自分宛の review 依頼を読む、
+  # aw-secretary の API の URL。無ければ null。
   commitmentsUrl ? null,
 }:
 let

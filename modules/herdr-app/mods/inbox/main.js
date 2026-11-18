@@ -1,7 +1,7 @@
 // 自分の手を待っている物を 1 か所に並べるモーダル。key で選んで、開く、URL を copy する、session に貼る
 // 許可や返事を待っている agent、見ていない間に終わった agent、Slack の依頼、aw-secretary の commitment (自分への約束) のうち手を付けるべき物、自分の branch の pull request で落ちた CI、自分宛の review 依頼
 // 中身を取りに行くのは ./feed.js と ./asks.js。開いていない間はタブバーと左バーの Agents の一覧が見に行き、ここは shared に置かれた物を読む
-// commitment だけは、開いた時にここで aw-secretary に聞き、答えもここに持つ
+// commitment と自分宛の review 依頼だけは、開いた時にここで aw-secretary に聞き、答えもここに持つ
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { panes, focused, run, notify, theme, shared, props, closeOverlay } from "herdr";
@@ -37,7 +37,7 @@ export default class Inbox extends View {
     this.handle.focus();
     // 開いた直後の focus は dialog の表示に奪われる事があるので、もう一度取る
     cx.timer.after(600, () => this.handle.focus());
-    // commitments は GET /commitments?view=inbox の答えで、読めるまで null
+    // commitments は GET /commitments?view=inbox の答えで、読めるまで null。review 依頼もこの中にある
     this.commitments = null; this.commitmentError = null; this.consulting = false;
     // 開いた時に取り直す。GitHub は前に見てから間が空いている時だけ
     refresh(cx);
@@ -47,6 +47,7 @@ export default class Inbox extends View {
 
   // head が見出しで、他は選べる行。url は copy と paste に使う物で、agent の行には無い。open は Enter で開く物が url と違う時だけ
   // mark は commitment の番号。発生源が同じ commitment のある Slack と review の行にも付ける。どちらの行も残す
+  // Slack の行は links で当て、review の行は aw-secretary が当てた commitment を使う
   rows(w) {
     const name = a => (a.title ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").trim() || a.program?.name || "agent";
     const where = a => `${a.space_name} · ${a.tab_name}`;
@@ -63,8 +64,8 @@ export default class Inbox extends View {
       // copy と paste は pull request の URL、Enter は落ちた check
       ...group("CI failed", w.failing.map(pr => ({ key: `c:${pr.url}`, tint: "ansi1", title: `#${pr.number} ${pr.title}`, side: pr.branch,
         body: pr.failed.map(c => c.name).join(" · "), url: pr.url, open: pr.failed.find(c => c.url)?.url }))),
-      ...group("Review requested", w.reviews.map(pr => ({ key: `r:${pr.url}`, tint: "accent", title: `#${pr.number} ${pr.title}`, side: ago(Date.parse(pr.updatedAt)),
-        body: pr.repository?.nameWithOwner ?? null, url: pr.url, mark: mark(pr.url) }))),
+      ...group("Review requested", (this.commitments?.reviews ?? []).map(pr => ({ key: `r:${pr.url}`, tint: "accent", title: `#${pr.number} ${pr.title}`, side: ago(Date.parse(pr.updatedAt)),
+        body: pr.repo ?? null, url: pr.url, mark: pr.commitment ? `#${pr.commitment}` : null }))),
     ];
   }
 
@@ -243,7 +244,7 @@ export default class Inbox extends View {
       this.scroll.scroll_to_item(shown === 1 ? 0 : shown);
     }
     const github = shared("inbox.github"), digest = shared("inbox.digest"), sl = digest?.state?.slack, cm = this.commitments;
-    const error = this.commitmentError ?? shared("inbox.reviews")?.error ?? digest?.error ?? (sl && !sl.connected ? "Slack connector is not signed in" : sl?.error) ?? "";
+    const error = this.commitmentError ?? digest?.error ?? (sl && !sl.connected ? "Slack connector is not signed in" : sl?.error) ?? "";
     const top = (id, label, action) => div().id(id).flex_none().px(6).h(22).flex().items_center().rounded(5).text_size(11).text_color(t.dim).cursor_pointer()
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => action(cx)).child(label);
     return v_flex().id("inbox").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx, list, at))

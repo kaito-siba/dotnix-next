@@ -132,7 +132,7 @@ in
         type = lib.types.nullOr lib.types.str;
         default = null;
         example = "http://albiflora:8793";
-        description = "Inbox に commitment (自分への約束) を出して状態を決める時の、aw-secretary serve の API の URL (kaito-siba/aw-secretary)";
+        description = "Inbox に commitment (自分への約束) と自分宛の review 依頼を出す時の、aw-secretary serve の API の URL (kaito-siba/aw-secretary)。null の machine ではどちらも出ない";
       };
 
       config = {
