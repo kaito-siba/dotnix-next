@@ -117,6 +117,11 @@ export class Commitments {
   // 書いて、答えの open の view で置き換える。Inbox の面の view は読み直す。答えを待つ間に Inbox の面へ移っていればすぐに、居なければその面を出す時に
   write(cx, path, body, then) {
     if (this.view?.running) { this.owner.note = COLLECTING; return; }
+    this.send(cx, path, body, then);
+  }
+
+  // collect の最中かを見ずに書く。見ていない面の view の running は古い事がある。collect の最中なら aw-secretary が 503 で断る
+  send(cx, path, body, then) {
     const sent = this.sec.write(cx, path, body, (got, cx) => {
       if (this.owner.note === WAITING) this.owner.note = null;
       this.owner.inboxStale = true;
@@ -187,7 +192,7 @@ export class Commitments {
     });
   }
 
-  // この dialog で書いた操作を、新しい物から 1 つ取り消す。列は aw-secretary が dialog ごとに持つ。戻せない時の理由 (列が空、後に別の書き込みがあった) は見出しに出る
+  // この dialog で書いた操作を、新しい物から 1 つ取り消す。列は aw-secretary が dialog ごとに持ち、Inbox の面の Slack の行の操作も入る。戻せない時の理由 (列が空、後に別の書き込みがあった) は見出しに出る
   // 落ちて答えが無かった取り消しは、aw-secretary で済んだかが分からない。送り直すと 1 つ前の操作まで戻るので、次の u は 1 度止めて知らせる
   undo(cx) {
     if (this.unsure) {
@@ -195,10 +200,14 @@ export class Commitments {
       this.owner.note = "The last undo may have gone through. Press r to check, then u again to undo the one before it";
       return;
     }
-    this.write(cx, "/undo?view=open", {}, got => {
+    // Inbox の面からも呼ぶので、この面の view の running では止めない
+    this.send(cx, "/undo?view=open", {}, got => {
       const u = got.answer?.undone;
       this.unsure = !got.answer && (got.status === null || got.status < 300);
+      // 答えには Slack の view も付くので、Inbox の面の Slack の行も置き換える
+      if (got.answer?.slack) this.owner.slack = got.answer.slack;
       if (!u) return;
+      if (u.target === "slack") { this.owner.note = `Undid ${u.label}${u.title ? `: ${u.title}` : ""}`; return; }
       this.owner.note = `Undid ${u.label}: #${u.id} ${u.title ?? ""}`;
       this.sel = u.id; this.details.delete(u.id);
     });
