@@ -10,11 +10,8 @@
   jq,
   # 同梱の layout / mod を写す元の tag。_package.nix の version と揃える。
   appVersion,
-  # inbox (./mods/inbox) が Slack の依頼と standup の下書きを読む、work-digest の
-  # API の URL。無ければ null。
-  workDigestUrl ? null,
-  # inbox が commitment (自分への約束) を読み書きする、aw-secretary の API の URL。
-  # 無ければ null。
+  # inbox (./mods/inbox) が Slack の依頼と commitment (自分への約束) を読み書き
+  # する、aw-secretary の API の URL。無ければ null。
   commitmentsUrl ? null,
 }:
 let
@@ -61,7 +58,6 @@ let
   # mod は nix の設定を知らないので、module として渡す。inbox と、その中身を
   # 取りに行く show-tabs の両方に置く。
   inboxEnv = writeText "herdr-inbox-env.js" ''
-    export const WORK_DIGEST = ${builtins.toJSON workDigestUrl};
     export const COMMITMENTS = ${builtins.toJSON commitmentsUrl};
   '';
 in
