@@ -4,7 +4,7 @@
 // commitment だけは、開いた時にここで aw-secretary に聞き、答えもここに持つ。dialog の 2 つ目の面は commitment の一覧 (./commitments.js)
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { panes, focused, run, notify, theme, shared, props, closeOverlay } from "herdr";
+import { panes, focused, run, notify, theme, shared, props, closeOverlay, nextCommand } from "herdr";
 import { waiting, checking, refresh, ask } from "./feed.js";
 import { readAsks, askOf } from "./asks.js";
 import { Secretary, merge } from "./secretary.js";
@@ -45,6 +45,8 @@ export default class Inbox extends View {
     this.faces = COMMITMENTS ? ["inbox", "commitments"] : ["inbox"];
     this.face = "inbox";
     this.cm = COMMITMENTS ? new Commitments(this, this.sec) : null;
+    // 開いている dialog の面を、keys.json と herdr-app do から選べる: "inbox.commitments" / "inbox.inbox"
+    cx.spawn(async cx => { for (;;) { const c = await nextCommand(); if (this.faces.includes(c)) { this.show(c, cx); cx.notify(); } } });
     // 開いた時に取り直す。GitHub は前に見てから間が空いている時だけ
     refresh(cx);
     ask(cx);
