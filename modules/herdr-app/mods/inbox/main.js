@@ -128,7 +128,7 @@ export default class Inbox extends View {
       if (!this.cm) return;
       this.cm.stale = true; this.cm.details.delete(id);
       if (this.face === "commitments") this.cm.show(cx);
-    }, { label: status, id, title: row.title });
+    });
     if (!sent) this.note = WAITING;
   }
 

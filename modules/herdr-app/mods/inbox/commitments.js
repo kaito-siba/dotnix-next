@@ -39,7 +39,7 @@ export class Commitments {
     // typing は入力欄の使い道 (PROMPT の key)。null は入力していない。target は入力欄を開いた時に選んでいた commitment の id で、決めた値はそこへ書く
     this.typing = null; this.opening = null; this.target = null;
     // 面の上に重ねる一覧: 開く発生源を選ぶ (choose) か、前回の朝レポートからの差分 (diff)
-    this.overlay = null;
+    this.overlay = null; this.unsure = false;
     this.scroll = VirtualListScrollHandle.new();
     this.input = InputState.new({ placeholder: "" });
     this.input.on("change", (_e, cx) => {
@@ -115,8 +115,7 @@ export class Commitments {
   }
 
   // 書いて、答えの open の view で置き換える。Inbox の面の view は読み直す。答えを待つ間に Inbox の面へ移っていればすぐに、居なければその面を出す時に
-  // undo は取り消しの token を積む時の label (./secretary.js の write)
-  write(cx, path, body, then, undo) {
+  write(cx, path, body, then) {
     if (this.view?.running) { this.owner.note = COLLECTING; return; }
     const sent = this.sec.write(cx, path, body, (got, cx) => {
       if (this.owner.note === WAITING) this.owner.note = null;
@@ -126,14 +125,11 @@ export class Commitments {
       this.take(got);
       this.reveal();
       this.want(cx);
-    }, undo);
+    });
     if (!sent) this.owner.note = WAITING;
   }
 
-  change(cx, c, body) {
-    const label = "status" in body ? body.status : "notes" in body ? "memo" : Object.keys(body)[0];
-    this.write(cx, `/commitments/${c.id}?view=open`, body, () => this.details.delete(c.id), { label, id: c.id, title: c.title });
-  }
+  change(cx, c, body) { this.write(cx, `/commitments/${c.id}?view=open`, body, () => this.details.delete(c.id)); }
 
   // 入力欄を開く (使い道と、開いた key と、初めの値)、または閉じる
   type(mode, cx, key = null, value = "") {
@@ -151,7 +147,7 @@ export class Commitments {
   submit(cx) {
     const mode = this.typing, v = this.input.value().trim(), c = this.view?.items.find(c => c.id === this.target);
     this.type(null, cx);
-    if (mode === "source" && v) this.write(cx, "/sources", { url: v }, (got, cx) => this.registered(got, cx));
+    if (mode === "source" && v) this.write(cx, "/sources?view=open", { url: v }, got => this.registered(got));
     else if (mode === "filter") return;
     // 入力している間に読み直して、その commitment が open でなくなった
     else if (!c) this.owner.note = "The commitment was closed while you were typing. Nothing was saved";
@@ -159,12 +155,12 @@ export class Commitments {
     else if (mode === "memo") this.change(cx, c, { notes: v || null });
     else if (mode === "title" && v) this.change(cx, c, { title: v });
     else if (mode === "correct" && v) this.write(cx, `/commitments/${c.id}/corrections?view=open`, { text: v }, got => {
-      if (got.answer) { this.owner.note = "Recorded. Its raw items will be extracted again at the next extract"; this.details.delete(c.id); }
-    }, { label: "correction", id: c.id, title: c.title });
+      if (got.answer) { this.owner.note = `Recorded. ${got.answer.reset ?? 0} raw items will be extracted again at the next extract`; this.details.delete(c.id); }
+    });
   }
 
-  // POST /sources の答えは view ではないので、open の view を読み直す。新しく足した URL の commitment は、抽出が済むまで出ない
-  registered(got, cx) {
+  // 抽出は aw-secretary の別の process で数十秒かかるので、新しく登録した URL の commitment は、その後に読み直すまで出ない
+  registered(got) {
     const a = got.answer;
     if (!a) return;
     // 紐付いた commitment を選ぶ。絞り込みに合わない事があるので、絞り込みは外す
@@ -172,7 +168,6 @@ export class Commitments {
     this.owner.note = got.status === 200 ? `${a.source.label} is already watched${a.commitment ? ` (#${a.commitment})` : ""}`
       : a.extracting ? `Registered ${a.source.label}. It is being extracted now; press r in a moment`
       : `Registered ${a.source.label}. It will be extracted at the next collect`;
-    this.load(cx);
   }
 
   // 発生源を開く。複数あれば選ばせる
@@ -192,16 +187,19 @@ export class Commitments {
     });
   }
 
-  // この dialog で書いた操作を、新しい物から 1 つ取り消す
-  // 戻せた token、404 (token が消えた)、409 (後に別の書き込みがあった) の token は捨てる。409 はこの列を戻し進めても解消しないので、捨てて 1 つ前を戻せるようにする
-  // 他 (落ちている、503、認可の失敗等) は残し、もう 1 度送れるようにする
+  // この dialog で書いた操作を、新しい物から 1 つ取り消す。列は aw-secretary が dialog ごとに持つ。戻せない時の理由 (列が空、後に別の書き込みがあった) は見出しに出る
+  // 落ちて答えが無かった取り消しは、aw-secretary で済んだかが分からない。送り直すと 1 つ前の操作まで戻るので、次の u は 1 度止めて知らせる
   undo(cx) {
-    const u = this.sec.undos.at(-1);
-    if (!u) { this.owner.note = "Nothing to undo in this dialog"; return; }
-    this.write(cx, "/undo?view=open", { token: u.token }, got => {
-      if (got.answer || got.status === 404 || got.status === 409) this.sec.undos.splice(this.sec.undos.indexOf(u), 1);
-      if (!got.answer) return;
-      this.owner.note = `Undid ${u.label}: #${u.id} ${u.title}`;
+    if (this.unsure) {
+      this.unsure = false;
+      this.owner.note = "The last undo may have gone through. Press r to check, then u again to undo the one before it";
+      return;
+    }
+    this.write(cx, "/undo?view=open", {}, got => {
+      const u = got.answer?.undone;
+      this.unsure = !got.answer && (got.status === null || got.status < 300);
+      if (!u) return;
+      this.owner.note = `Undid ${u.label}: #${u.id} ${u.title ?? ""}`;
       this.sel = u.id; this.details.delete(u.id);
     });
   }
