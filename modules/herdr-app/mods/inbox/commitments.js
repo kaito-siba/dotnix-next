@@ -192,12 +192,14 @@ export class Commitments {
     });
   }
 
-  // この dialog で書いた操作を、新しい物から 1 つ取り消す。aw-secretary が断った token も捨てる (他の書き込みとぶつかった、期限が切れた等)
+  // この dialog で書いた操作を、新しい物から 1 つ取り消す
+  // 戻せた token、404 (token が消えた)、409 (後に別の書き込みがあった) の token は捨てる。409 はこの列を戻し進めても解消しないので、捨てて 1 つ前を戻せるようにする
+  // 他 (落ちている、503、認可の失敗等) は残し、もう 1 度送れるようにする
   undo(cx) {
     const u = this.sec.undos.at(-1);
     if (!u) { this.owner.note = "Nothing to undo in this dialog"; return; }
     this.write(cx, "/undo?view=open", { token: u.token }, got => {
-      if (got.status !== null) this.sec.undos.splice(this.sec.undos.indexOf(u), 1);
+      if (got.answer || got.status === 404 || got.status === 409) this.sec.undos.splice(this.sec.undos.indexOf(u), 1);
       if (!got.answer) return;
       this.owner.note = `Undid ${u.label}: #${u.id} ${u.title}`;
       this.sel = u.id; this.details.delete(u.id);
