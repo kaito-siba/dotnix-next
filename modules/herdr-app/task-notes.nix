@@ -5,6 +5,9 @@
   # turn の後に作り、要約のある tab では turn のたびに、裏で Haiku を 1 回
   # 走らせる (subscription の枠を使う)。herdr の端末の外では何もしない。agent の
   # 動く machine に要るので、herdr-app を入れる全ての machine に入れる。
+  # sbx の sandbox の中の Claude Code は Stop hook を持たないので、host の service
+  # (task-notes watch) が端末の状態から turn の終わりを見つける。herdr-app の mod は
+  # agent の居る folder を task-notes where で訊く。
   flake.modules.homeManager.herdr-app =
     {
       pkgs,
@@ -32,6 +35,21 @@
     in
     {
       home.packages = [ task-notes ];
+
+      # hc events は core が再起動すると切れるので、落ちたら起こし直す。
+      systemd.user.services.task-notes = lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
+        Unit.Description = "Summarize Claude Code turns in sbx sandboxes for herdr-app";
+        Service = {
+          ExecStart = "${lib.getExe task-notes} watch";
+          # hc / claude / sbx / git は user の profile、ps は system の物を使う。
+          Environment = [
+            "PATH=${config.home.profileDirectory}/bin:/run/wrappers/bin:/run/current-system/sw/bin"
+          ];
+          Restart = "always";
+          RestartSec = 5;
+        };
+        Install.WantedBy = [ "default.target" ];
+      };
 
       # ~/.claude/settings.json は Claude Code も他の tool (herdr、unsnooze) も
       # 書くので、丸ごとは置けない。Stop hook に自分の分だけを足す。store の

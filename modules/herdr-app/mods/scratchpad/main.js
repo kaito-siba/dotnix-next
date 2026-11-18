@@ -5,7 +5,8 @@
 import { mkdir, readFile, readdir, unlink } from "fs/promises";
 import { View, div, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, Scrollbar, v_virtual_list, VirtualListScrollHandle, InputState, Input } from "gpui-base";
-import { spaces, panes, focused, exec, hc, run, notify, appHome, readTextFile, watchFolder, theme, settings, props, closeOverlay } from "herdr";
+import { panes, focused, exec, hc, run, notify, appHome, readTextFile, watchFolder, theme, settings, props, closeOverlay } from "herdr";
+import { location, where } from "./where.js";
 
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", toml: "yaml", jsonc: "json", svelte: "html", vue: "html" };
 const MAX_FILES = 500, MAX_PREVIEW = 400000, POLL = 5000, ROW = 28, PAD = 16;
@@ -16,13 +17,14 @@ const COPIES = "scratchpad/preview";
 const MAX_PICTURE = 16 * 1024 * 1024;
 
 // Claude Code は起動した folder の名前で scratchpad を作るので、pane が下の階層に居ても見つかるよう親へ遡る
-// 引数は folder、走査する範囲 (out か all)、all の時に返す件数、session id (空なら全 session)、all の時の filter の語 (glob を escape 済み)
+// session が分かっていれば、その id で探した scratchpad の folder の名前を使う。EnterWorktree した session は、起動した folder の名前の下に scratchpad を残して worktree へ移る
+// 引数は folder、走査する範囲 (out か all)、all の時に返す件数、絞り込む session id (空なら全 session)、folder の名前を決める session id (空なら folder から遡る)、all の時の filter の語 (glob を escape 済み)
 // 範囲が out なら直下と out/ だけを見る。scratchpad には clone した repository 等で数万ファイルが入り得るので、全体は all の時だけ走査し、filter と件数の絞り込みもこちらで済ませる
 // 出力は "mtime\tsize\tpath\0" の繰り返し
 // find の -printf は GNU 専用で、macOS の find (BSD) には無い。その時は stat に同じ形で書かせる。macOS でも stat だけ GNU の事があるので、stat の種類も見る
 const LIST = `
-d=$1 mode=$2 max=$3 sid=$4
-shift 4
+d=$1 mode=$2 max=$3 sid=$4 home=$5
+shift 5
 tmp=\${CLAUDE_CODE_TMPDIR:-/tmp}
 if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then
   files() { find "$@" -printf '%T@\\t%s\\t%p\\0' 2>/dev/null; }
@@ -31,11 +33,19 @@ elif stat -c %Y / >/dev/null 2>&1; then
 else
   files() { find "$@" -print0 2>/dev/null | xargs -0 stat -f '%m%t%z%t%N' 2>/dev/null | tr '\\n' '\\0'; }
 fi
-while :; do
+slug=
+if [ -n "$home" ]; then
+  for s in "$tmp"/claude-*/*/"$home"/scratchpad; do
+    [ -d "$s" ] || continue
+    s=\${s%/*/scratchpad}; slug=\${s##*/}; break
+  done
+fi
+while [ -z "$slug" ]; do
   slug=$(printf %s "$d" | sed 's/[^A-Za-z0-9]/-/g')
   for s in "$tmp"/claude-*/"$slug"/*/scratchpad; do
     [ -d "$s" ] && break 2
   done
+  slug=
   [ "$d" = / ] && exit 0
   d=\${d%/*}
   [ -z "$d" ] && d=/
@@ -61,12 +71,6 @@ list() {
 # sort と head の -z も GNU 専用なので、並べ替える間だけ改行区切りにする
 if [ "$mode" = all ]; then list "$@" | tr '\\0' '\\n' | sort -rn | head -n "$max" | tr '\\n' '\\0'; else list; fi
 `;
-
-function location() {
-  const space = spaces().find(s => s.active), f = focused();
-  const pane = f?.pane ? panes().find(p => p.pane === f.pane) : null;
-  return { cwd: pane?.cwd || f?.cwd || space?.folder, on: space?.machine ?? null, terminal: f?.terminal ?? pane?.terminal ?? null };
-}
 
 function parse(stdout, box) {
   const out = [];
@@ -163,12 +167,16 @@ export default class Scratchpad extends View {
   async close() { await this.drop(this.picture); }
 
   // focus している pane で動いている Claude Code を調べて、表示をその session に絞る
-  // 端末の foreground の pid から、Claude Code が ~/.claude/sessions/<pid>.json に書いている session id と起動した folder を引く
-  // sbx 越しだと foreground は sbx で、中の session までは分からないので、sandbox の中だけに絞る
+  // session と agent の居る folder は task-notes where に訊く (./where.js)。sbx 越しなら sandbox の中だけに絞り、session が分かればそれにも絞る
+  // 訊けない時は、端末の foreground の pid から、Claude Code が ~/.claude/sessions/<pid>.json に書いている session id と folder を引く。sbx 越しだと中の session までは分からない
   // Claude Code が動いていない pane は null。その時は folder で動いた全 session を並べる
   async resolve() {
     const { terminal, on } = this.loc;
     if (!terminal) return null;
+    const place = await where(this.loc);
+    if (place.source === "claude") return place.session ? { id: place.session, cwd: place.cwd } : null;
+    if (place.source === "sbx") return on ? null : { box: true, id: place.session, cwd: place.cwd };
+    if (place.source) return null;
     try {
       const fg = JSON.parse((await hc(["get", terminal, "--json"])).stdout).foreground;
       if (!fg) return null;
@@ -185,9 +193,9 @@ export default class Scratchpad extends View {
   terms() { return this.filter.toLowerCase().split(/\s+/).filter(Boolean); }
 
   // sbx exec は止まっている sandbox を起動してしまうので、動いている物だけを毎回調べ直す
-  // この folder を workspace に含まない sandbox に、ここの scratchpad は無い
+  // agent の居る folder を workspace に含まない sandbox に、ここの scratchpad は無い
   async sandboxes() {
-    const { cwd, on } = this.loc;
+    const { on } = this.loc, cwd = this.scope?.cwd ?? this.loc.cwd;
     if (on) return [];
     try {
       const r = await exec("sbx", ["ls", "--json"]);
@@ -207,7 +215,7 @@ export default class Scratchpad extends View {
 
   // sbx の sandbox は microVM なので、中の /tmp は sbx exec 越しにしか読めない
   async inside(args) {
-    if (this.only()?.id) return [];
+    if (this.only() && !this.only().box) return [];
     const lists = await Promise.all((await this.sandboxes()).map(box =>
       exec("sbx", ["exec", box, "sh", ...args]).then(r => r.code === 0 ? parse(r.stdout, box) : [], () => [])));
     return lists.flat();
@@ -219,7 +227,7 @@ export default class Scratchpad extends View {
     this.busy[part] = true;
     const only = this.only(), gen = this.gen, local = part === "local";
     const terms = this.all ? this.terms().map(term => term.replace(/[\\*?[\]]/g, "\\$&")) : [];
-    const args = ["-c", LIST, "scratchpad", only?.cwd ?? this.loc.cwd, this.all ? "all" : "out", String(MAX_FILES), only?.id ?? "", ...terms];
+    const args = ["-c", LIST, "scratchpad", only?.cwd ?? this.loc.cwd, this.all ? "all" : "out", String(MAX_FILES), only?.id ?? "", this.scope?.id ?? "", ...terms];
     cx.spawn(async cx => {
       try {
         this.found[part] = await (local ? this.local(args) : this.inside(args));
