@@ -3,7 +3,6 @@
 //   show-tabs  いつも出ているタブバー。数分おきに見に行き、件数をボタンに出す
 // 取った物は shared に置き、モーダルと tasks mod が読む
 //   "inbox.github"   { prs, at }      開いている pane の branch の pull request と CI
-//   "inbox.reviews"  { list, error }  自分宛の review 依頼
 //   "inbox.digest"   { state, error } 常駐機の work-digest の状態: Slack の依頼と standup の下書き (modules/work-digest)
 import { svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
@@ -11,7 +10,7 @@ import { spaces, panes, agents, exec, run, shared, setShared } from "herdr";
 // work-digest の API の URL。使わない machine では null (nix が書く: ../../_show.nix)
 import { WORK_DIGEST } from "./env.js";
 
-const TICK = 60000, PULLS = 3 * 60000, REVIEWS = 5 * 60000, MAX_REPOS = 12;
+const TICK = 60000, PULLS = 3 * 60000, MAX_REPOS = 12;
 // sweep や下書きが走っている間は、終わるのを早めに見に行く
 const DIGEST = 60000, DIGEST_BUSY = 10000;
 const FAILED = new Set(["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
@@ -19,7 +18,7 @@ const TRUNK = new Set(["main", "master", "develop", "trunk"]);
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-let busy = false, pulledAt = 0, reviewedAt = 0;
+let busy = false, pulledAt = 0;
 let asking = false, digestAt = 0;
 
 // GitHub を見に行っている最中か
@@ -60,27 +59,13 @@ async function pulls() {
   setShared("inbox.github", { prs, at: Date.now() });
 }
 
-async function requests() {
-  let list = shared("inbox.reviews")?.list ?? [], error = null;
-  try {
-    const r = await exec("gh", ["search", "prs", "--review-requested=@me", "--state=open", "--limit", "20", "--json", "number,title,url,repository,updatedAt"]);
-    if (r.code !== 0) throw new Error(r.stderr.trim().split("\n")[0] || "gh failed");
-    list = JSON.parse(r.stdout);
-  } catch (e) { error = String(e?.message ?? e); }
-  if (!same({ list, error }, shared("inbox.reviews"))) setShared("inbox.reviews", { list, error });
-}
-
-// GitHub を見に行く。now が無ければ、前に見てから間が空いた物だけ
+// GitHub を見に行く。now が無ければ、前に見てから間が空いた時だけ
 export function refresh(cx, now) {
-  if (busy) return;
-  const pull = now || Date.now() - pulledAt >= PULLS, review = now || Date.now() - reviewedAt >= REVIEWS;
-  if (!pull && !review) return;
+  if (busy || !now && Date.now() - pulledAt < PULLS) return;
   busy = true;
   cx.spawn(async cx => {
-    try {
-      if (pull) { await pulls(); pulledAt = Date.now(); }
-      if (review) { await requests(); reviewedAt = Date.now(); }
-    } finally { busy = false; cx.notify(); }
+    try { await pulls(); pulledAt = Date.now(); }
+    finally { busy = false; cx.notify(); }
   });
 }
 
@@ -128,13 +113,12 @@ export function waiting() {
     done: all.filter(a => a.status === "done"),
     slack: (shared("inbox.digest")?.state?.slack.items ?? []).filter(i => !i.ticked).sort((a, b) => order(a) - order(b) || b.at - a.at),
     failing: (shared("inbox.github")?.prs ?? []).filter(pr => pr.ci === "fail"),
-    reviews: shared("inbox.reviews")?.list ?? [],
   };
 }
 
-// Slack の FYI は数えない
+// Slack の FYI は数えない。commitment は、Inbox を開いた時に aw-secretary から読むので数えない
 export function count(w = waiting()) {
-  return w.blocked.length + w.done.length + w.failing.length + w.reviews.length + w.slack.filter(i => i.kind === "ask").length;
+  return w.blocked.length + w.done.length + w.failing.length + w.slack.filter(i => i.kind === "ask").length;
 }
 
 // タブバーに出すボタン。押すとモーダルを開き、もう一度押すと閉じる。見た目は隣の panel のボタンに合わせる

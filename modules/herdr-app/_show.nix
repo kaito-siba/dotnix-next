@@ -13,6 +13,9 @@
   # inbox (./mods/inbox) が Slack の依頼と standup の下書きを読む、work-digest の
   # API の URL。無ければ null。
   workDigestUrl ? null,
+  # inbox が commitment (自分への約束) を読み書きする、aw-secretary の API の URL。
+  # 無ければ null。
+  commitmentsUrl ? null,
 }:
 let
   # Show パネルに物を置き、注釈を焼き込むコマンド。mod からも端末からも
@@ -59,6 +62,7 @@ let
   # 取りに行く show-tabs の両方に置く。
   inboxEnv = writeText "herdr-inbox-env.js" ''
     export const WORK_DIGEST = ${builtins.toJSON workDigestUrl};
+    export const COMMITMENTS = ${builtins.toJSON commitmentsUrl};
   '';
 in
 # ~/.config/herdr-app にそのまま重ねる木。
