@@ -6,12 +6,9 @@
     # generated ones rather than losing them.
     home-manager.backupFileExtension = "before-nix";
 
-    # Slack の依頼と standup の下書きは albiflora が作る (modules/work-digest)。
-    # herdr-app の Inbox から tailnet 越しに読む。
-    home-manager.users.k-nanchi.herdr-app.workDigestUrl = "http://albiflora:8792";
-
-    # commitment (自分への約束) も albiflora の aw-secretary が持つ
-    # (modules/hosts/albiflora/aw-secretary.nix)。
+    # Slack の依頼と commitment (自分への約束) は albiflora の aw-secretary が持つ
+    # (modules/hosts/albiflora/aw-secretary.nix)。herdr-app の Inbox から tailnet
+    # 越しに読む。
     home-manager.users.k-nanchi.herdr-app.commitmentsUrl = "http://albiflora:8793";
   };
 }

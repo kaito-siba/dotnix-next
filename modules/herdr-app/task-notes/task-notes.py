@@ -26,7 +26,7 @@ from pathlib import Path
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 MODEL = "haiku"
 STATE = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "task-notes"
-# STATE の *.json は tab の要約だけにする。work-digest も読むので、cache は別の所に置く
+# STATE の *.json は tab の要約だけにし、cache は別の所に置く
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "task-notes"
 # summarize の中で走らせる claude も Stop hook を呼ぶ。この印で自分を呼び直さない
 GUARD = "TASK_NOTES_SUMMARY"

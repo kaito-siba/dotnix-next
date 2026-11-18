@@ -1,7 +1,7 @@
 {
-  # commitment (自分への約束) はこの常駐機の aw-secretary が集めて持ち、laptop
-  # (incarnata) の herdr-app の Inbox からも読み書きする。API (aw-secretary serve)
-  # は nix で管理していない: aw-secretary の repo にある
+  # Slack の依頼と commitment (自分への約束) はこの常駐機の aw-secretary が集めて
+  # 持ち、laptop (incarnata) の herdr-app の Inbox からも読み書きする。API
+  # (aw-secretary serve) は nix で管理していない: aw-secretary の repo にある
   # deploy/systemd/aw-secretary-serve.service を、user が手で ~/.config/systemd/user
   # に置いて有効にする。他の machine から読ませる node は、aw-secretary の
   # config.toml の [commitments.api] allowed_nodes に書く。
@@ -10,5 +10,8 @@
     networking.firewall.interfaces."tailscale0".allowedTCPPorts = [ 8793 ];
 
     home-manager.users.w963n.herdr-app.commitmentsUrl = "http://127.0.0.1:8793";
+
+    # aw-secretary の serve と timer は user の unit なので、logout している間も動かす
+    users.users.w963n.linger = true;
   };
 }
