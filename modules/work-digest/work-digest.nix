@@ -63,7 +63,8 @@
         Service = {
           Type = "oneshot";
           ExecStart = agent command;
-          Environment = environment;
+          # claude -p は既定で claude.ai の connector がつながる前に最初の turn を送り、その turn の model には Slack の tool が見えない。
+          Environment = environment ++ [ "MCP_CONNECTION_NONBLOCKING=false" ];
         };
       };
       timer = description: calendar: {
