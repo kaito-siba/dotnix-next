@@ -3,23 +3,15 @@
 //   show-tabs  いつも出ているタブバー。数分おきに見に行き、件数をボタンに出す
 // 取った物は shared に置き、モーダルと tasks mod が読む
 //   "inbox.github"   { prs, at }      開いている pane の branch の pull request と CI
-//   "inbox.digest"   { state, error } 常駐機の work-digest の状態: Slack の依頼と standup の下書き (modules/work-digest)
 import { svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, agents, exec, run, shared, setShared } from "herdr";
-// work-digest の API の URL。使わない machine では null (nix が書く: ../../_show.nix)
-import { WORK_DIGEST } from "./env.js";
 
 const TICK = 60000, PULLS = 3 * 60000, MAX_REPOS = 12;
-// sweep や下書きが走っている間は、終わるのを早めに見に行く
-const DIGEST = 60000, DIGEST_BUSY = 10000;
 const FAILED = new Set(["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
 const TRUNK = new Set(["main", "master", "develop", "trunk"]);
 
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-
 let busy = false, pulledAt = 0;
-let asking = false, digestAt = 0;
 
 // GitHub を見に行っている最中か
 export const checking = () => busy;
@@ -69,56 +61,25 @@ export function refresh(cx, now) {
   });
 }
 
-// work-digest に聞く。path が無ければ状態を読むだけ。状態を変える call は、変えた後の状態か、始めた事だけを返す
-export function ask(cx, path, body) {
-  if (!WORK_DIGEST || asking && !path) return;
-  asking = true;
-  cx.spawn(async cx => {
-    // 聞けなかった時は、前の状態を残して error だけを付ける
-    let state = shared("inbox.digest")?.state ?? null, error = null;
-    try {
-      if (path) {
-        const r = await fetch(`${WORK_DIGEST}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
-        if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `work-digest answered ${r.status}`);
-      }
-      const r = await fetch(`${WORK_DIGEST}/state`);
-      if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `work-digest answered ${r.status}`);
-      state = await r.json();
-    } catch (e) { error = String(e?.message ?? e); }
-    finally {
-      asking = false; digestAt = Date.now();
-      if (!same({ state, error }, shared("inbox.digest"))) setShared("inbox.digest", { state, error });
-      cx.notify();
-    }
-  });
-}
-
 // 数分おきに見に行き始める。いつも出ている mod の init から 1 度だけ呼ぶ
 export function start(cx) {
   cx.timer.every(TICK, cx => refresh(cx));
   refresh(cx);
-  if (!WORK_DIGEST) return;
-  cx.timer.every(DIGEST_BUSY, cx => {
-    const d = shared("inbox.digest")?.state;
-    if (d?.slack.running || d?.standup.running || Date.now() - digestAt >= DIGEST) ask(cx);
-  });
-  ask(cx);
 }
 
-// 自分の手を待っている物。agent の状態は app の live data から、他は shared から
+// 自分の手を待っている物。agent の状態は app の live data から、CI は shared から
 export function waiting() {
-  const all = agents(), order = i => (i.urgent ? 0 : i.kind === "ask" ? 1 : 2);
+  const all = agents();
   return {
     blocked: all.filter(a => a.status === "blocked"),
     done: all.filter(a => a.status === "done"),
-    slack: (shared("inbox.digest")?.state?.slack.items ?? []).filter(i => !i.ticked).sort((a, b) => order(a) - order(b) || b.at - a.at),
     failing: (shared("inbox.github")?.prs ?? []).filter(pr => pr.ci === "fail"),
   };
 }
 
-// Slack の FYI は数えない。commitment は、Inbox を開いた時に aw-secretary から読むので数えない
+// Slack と commitment は、Inbox を開いた時に aw-secretary から読むので数えない
 export function count(w = waiting()) {
-  return w.blocked.length + w.done.length + w.failing.length + w.slack.filter(i => i.kind === "ask").length;
+  return w.blocked.length + w.done.length + w.failing.length;
 }
 
 // タブバーに出すボタン。押すとモーダルを開き、もう一度押すと閉じる。見た目は隣の panel のボタンに合わせる

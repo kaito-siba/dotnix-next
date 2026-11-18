@@ -1,11 +1,11 @@
 // 自分の手を待っている物を 1 か所に並べるモーダル。key で選んで、開く、URL を copy する、session に貼る
 // 許可や返事を待っている agent、見ていない間に終わった agent、Slack の依頼、aw-secretary の commitment (自分への約束) のうち手を付けるべき物、自分の branch の pull request で落ちた CI
 // 中身を取りに行くのは ./feed.js と ./asks.js。開いていない間はタブバーと左バーの Agents の一覧が見に行き、ここは shared に置かれた物を読む
-// commitment だけは、開いた時にここで aw-secretary に聞き、答えもここに持つ。dialog の 2 つ目の面は commitment の一覧 (./commitments.js)
+// Slack と commitment は、開いた時にここで aw-secretary に聞き、答えもここに持つ。dialog の 2 つ目の面は commitment の一覧 (./commitments.js)
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { panes, focused, run, notify, theme, shared, props, closeOverlay, nextCommand } from "herdr";
-import { waiting, checking, refresh, ask } from "./feed.js";
+import { waiting, checking, refresh } from "./feed.js";
 import { readAsks, askOf } from "./asks.js";
 import { Secretary, merge } from "./secretary.js";
 import { Commitments, WAITING, COLLECTING } from "./commitments.js";
@@ -14,12 +14,9 @@ import { COMMITMENTS } from "./env.js";
 
 // commitment が Inbox に出ている訳 (reason) の見出しと、行の印の色
 const REASONS = { triage: ["triage", "accent"], overdue: ["overdue", "blocked"], due_soon: ["due soon", "working"], maybe_done: ["done?", "done"] };
-// commitment の行で状態を決める key。Slack の行では d と s は tick と skip
+// commitment の行で状態を決める key。Slack の行では d と s は tick と skip (FYI の s は seen)
 const DECIDE = { a: "active", x: "rejected", d: "done", s: "later", w: "waiting" };
 const FACE = { inbox: "Inbox", commitments: "Commitments" };
-
-// Slack の permalink を、aw-secretary の links の key (slack:<channel>:<thread の root の ts>) にする。返信の permalink は thread_ts の root に寄せる
-const slackKey = url => { const m = /\/archives\/([A-Z0-9]+)\/p(\d+)(\d{6})/.exec(url ?? ""); if (!m) return null; const t = /[?&]thread_ts=(\d+\.\d+)/.exec(url); return `slack:${m[1]}:${t ? t[1] : `${m[2]}.${m[3]}`}`; };
 
 function ago(ms) {
   const s = Math.max(0, (Date.now() - ms) / 1000);
@@ -40,6 +37,8 @@ export default class Inbox extends View {
     cx.timer.after(600, () => this.handle.focus());
     // commitments は GET /commitments?view=inbox の答えで、読めるまで null。inboxStale は Commitments の面で書いた後の印で、この面を出す時に読み直す
     this.commitments = null; this.commitmentError = null; this.inboxStale = false;
+    // slack は GET /slack の答えで、読めるまで null
+    this.slack = null; this.slackError = null;
     // URL の無い machine では Commitments の面を出さない
     this.sec = new Secretary(COMMITMENTS);
     this.faces = COMMITMENTS ? ["inbox", "commitments"] : ["inbox"];
@@ -49,7 +48,6 @@ export default class Inbox extends View {
     cx.spawn(async cx => { for (;;) { const c = await nextCommand(); if (this.faces.includes(c)) { this.show(c, cx); cx.notify(); } } });
     // 開いた時に取り直す。GitHub は前に見てから間が空いている時だけ
     refresh(cx);
-    ask(cx);
     this.load(cx);
   }
 
@@ -61,8 +59,10 @@ export default class Inbox extends View {
   }
 
   // head が見出しで、他は選べる行。url は copy と paste に使う物で、agent の行には無い。open は Enter で開く物が url と違う時だけ
-  // mark は commitment の番号。発生源が同じ commitment のある Slack の行にも付ける。どちらの行も残す
+  // mark は commitment の番号。発生源が同じ commitment のある Slack の行にも付ける。open な commitment に紐付いた thread は aw-secretary が Slack に出さないので、普段は付かない
+  // Slack の行は aw-secretary が並べた順に出す (急ぎ、依頼、FYI の順で、その中は新しい順)
   rows(w) {
+    const slack = this.slack?.items ?? [];
     const name = a => (a.title ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").trim() || a.program?.name || "agent";
     const where = a => `${a.space_name} · ${a.tab_name}`;
     const group = (title, list) => list.length ? [{ key: `head:${title}`, head: `${title} · ${list.length}` }, ...list] : [];
@@ -70,7 +70,7 @@ export default class Inbox extends View {
     return [
       ...group("Needs you", w.blocked.map(a => ({ key: `b:${a.address}`, tint: "blocked", title: name(a), side: where(a), body: askOf(a), agent: a.address }))),
       ...group("Finished", w.done.map(a => ({ key: `d:${a.address}`, tint: "done", title: name(a), side: where(a), agent: a.address }))),
-      ...group("Slack", w.slack.map(item => ({ key: `s:${item.permalink}`, slack: item, url: item.permalink, mark: mark(slackKey(item.permalink)) }))),
+      ...group("Slack", slack.map(item => ({ key: `s:${item.permalink}`, slack: item, url: item.permalink, mark: mark(item.key) }))),
       // Enter と copy と paste は、最初の発生源の URL
       ...group("Commitments", (this.commitments?.items ?? []).map(c => ({ key: `m:${c.id}`, commitment: c, tint: REASONS[c.reason]?.[1] ?? "dim", title: c.title, mark: `#${c.id}`,
         side: [REASONS[c.reason]?.[0] ?? c.reason, c.due && `due ${c.due}`].filter(Boolean).join(" · "),
@@ -106,15 +106,26 @@ export default class Inbox extends View {
     run("pane.focus", { pane: pane.pane });
   }
 
-  // Slack の行を片付ける。tick は依頼を済ませた印で、FYI には無い。skip は依頼なら見送る、FYI なら読んだ印
+  // Slack の行を片付け、答えの view で置き換える。tick は依頼を済ませた、skip は依頼を見送る、seen は FYI を読んだ印
   settle(cx, row, op) {
-    if (!row?.slack || op === "tick" && row.slack.kind !== "ask") return;
-    ask(cx, "/slack/items", { op, ids: [row.slack.permalink] });
+    if (!row?.slack || (row.slack.kind === "ask" ? op === "seen" : op !== "seen")) return;
+    if (this.slack?.running) { this.note = COLLECTING; return; }
+    const sent = this.sec.write(cx, "/slack/items", { op, ids: [row.slack.permalink] }, got => {
+      if (this.note === WAITING) this.note = null;
+      this.slack = merge(this.slack, got); this.slackError = got.error;
+    });
+    if (!sent) this.note = WAITING;
   }
 
+  loadSlack(cx) {
+    this.sec.read(cx, "slack", "/slack", got => { this.slack = merge(this.slack, got); this.slackError = got.error; });
+  }
+
+  // inbox の view と Slack を読む。open な commitment に紐付いた thread は Slack に出ないので、commitment を変えたら Slack も読み直す
   load(cx) {
     this.inboxStale = false;
     this.sec.read(cx, "inbox", "/commitments?view=inbox", got => { this.commitments = merge(this.commitments, got); this.commitmentError = got.error; });
+    this.loadSlack(cx);
   }
 
   // commitment の状態を決め、答えの inbox の view で置き換える。collect の最中は aw-secretary が書かせないので、送らない
@@ -125,6 +136,7 @@ export default class Inbox extends View {
     const sent = this.sec.write(cx, `/commitments/${id}`, { status }, (got, cx) => {
       if (this.note === WAITING) this.note = null;
       this.commitments = merge(this.commitments, got); this.commitmentError = got.error;
+      this.loadSlack(cx);
       if (!this.cm) return;
       this.cm.stale = true; this.cm.details.delete(id);
       if (this.face === "commitments") this.cm.show(cx);
@@ -154,8 +166,10 @@ export default class Inbox extends View {
       else if (plain && k === "p") this.paste(cx, row);
       else if (plain && row?.commitment && Object.hasOwn(DECIDE, k)) this.decide(cx, row, DECIDE[k]);
       else if (plain && k === "d") this.settle(cx, row, "tick");
-      else if (plain && k === "s") this.settle(cx, row, "skip");
-      else if (plain && k === "r") { refresh(cx, true); ask(cx); this.load(cx); }
+      else if (plain && k === "s") this.settle(cx, row, row?.slack?.kind === "ask" ? "skip" : "seen");
+      else if (plain && k === "r") { refresh(cx, true); this.load(cx); }
+      // 取り消しは Commitments の面と同じ。この dialog で書いた操作を、面を問わず新しい物から戻す
+      else if (plain && k === "u" && this.cm) this.cm.undo(cx);
     }
     // 他の key も下の端末へは流さない
     cx.stop_propagation();
@@ -195,7 +209,7 @@ export default class Inbox extends View {
   }
 
   // Slack の依頼と FYI。Done は片付けた、Skip は見送る、Seen は FYI を読んだ印
-  slack(t, row, on) {
+  slackCard(t, row, on) {
     const item = row.slack, asked = item.kind === "ask";
     return this.frame(t, row, on, item.urgent ? t.blocked : t.border)
       .child(h_flex().gap(8).items_center()
@@ -205,36 +219,19 @@ export default class Inbox extends View {
         .child(div().flex_none().max_w(220).truncate().text_size(11).text_color(t.dim).child(item.channel)))
       .child(div().text_size(12).text_color(t.muted).child(item.text))
       .child(h_flex().gap(6).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(item.due ? t.working : t.dim).child(item.due || ago(item.at)))
+        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(item.due ? t.working : t.dim).child(item.due || ago(Date.parse(item.askedAt))))
         .when(asked, el => el.child(this.chip(t, `in-done-${row.key}`, "Done", cx => this.settle(cx, row, "tick")))
           .child(this.chip(t, `in-skip-${row.key}`, "Skip", cx => this.settle(cx, row, "skip"))))
-        .when(!asked, el => el.child(this.chip(t, `in-seen-${row.key}`, "Seen", cx => this.settle(cx, row, "skip")))));
-  }
-
-  // standup の下書き。Copy は Slack 等にそのまま貼れる箇条書きで clipboard に入れる
-  standup(t, d) {
-    const text = d.bullets.map(b => `- ${b}`).join("\n");
-    return v_flex().flex_none().px(14).py(10).gap(6).border_t(1).border_color(t.border).bg(t.chrome)
-      .child(h_flex().gap(6).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(11).font_semibold().text_color(t.muted)
-          .child(`Standup${d.day ? ` · ${d.label} ${d.day}` : ""}${d.running ? " · writing…" : d.writtenAt ? ` · ${ago(d.writtenAt)}` : ""}`))
-        .when(Boolean(d.bullets.length), el => el.child(this.chip(t, "in-su-copy", this.copied === text ? "Copied" : "Copy", cx => { cx.write_to_clipboard(text); this.copied = text; cx.notify(); })))
-        .when(!d.running, el => el.child(this.chip(t, "in-su-write", "Write now", cx => ask(cx, "/standup/write")))))
-      .when(Boolean(d.error), el => el.child(div().text_size(11).text_color(t.blocked).child(d.error)))
-      .when(Boolean(d.note), el => el.child(div().text_size(11).text_color(t.working).child(d.note)))
-      .child(d.bullets.length
-        ? v_flex().id("in-su-body").max_h(200).overflow_y_scrollbar().gap(3).children(d.bullets.map(b => h_flex().gap(6).items_start().text_size(12)
-          .child(div().flex_none().text_color(t.dim).child("•")).child(div().flex_1().min_w(0).child(b))))
-        : div().text_size(12).text_color(t.dim).child(d.running ? "" : "No draft yet"));
+        .when(!asked, el => el.child(this.chip(t, `in-seen-${row.key}`, "Seen", cx => this.settle(cx, row, "seen")))));
   }
 
   // 下端の key の案内。選んでいる行で効く key だけを出す
-  hint(row, collecting) {
-    const keys = ["j/k move", "Enter open"];
+  hint(row) {
+    const keys = ["j/k move", "Enter open"], wait = "wait until aw-secretary finishes collecting, then r";
     if (row?.url) keys.push("y copy URL", "p paste to session");
-    if (row?.slack) keys.push(...(row.slack.kind === "ask" ? ["d done", "s skip"] : ["s seen"]));
-    if (row?.commitment) keys.push(...(collecting ? ["a/x/d/s/w wait until aw-secretary finishes collecting, then r"] : ["a adopt", "x reject", "d done", "s later", "w waiting"]));
-    return [...keys, "r refresh", ...(this.faces.length > 1 ? ["Tab face"] : []), "Esc close"].join(" · ");
+    if (row?.slack) keys.push(...(this.slack?.running ? [`d/s ${wait}`] : row.slack.kind === "ask" ? ["d done", "s skip"] : ["s seen"]));
+    if (row?.commitment) keys.push(...(this.commitments?.running ? [`a/x/d/s/w ${wait}`] : ["a adopt", "x reject", "d done", "s later", "w waiting"]));
+    return [...keys, "r refresh", ...(this.cm ? ["u undo", "Tab face"] : []), "Esc close"].join(" · ");
   }
 
   render(cx) {
@@ -252,10 +249,10 @@ export default class Inbox extends View {
       const shown = rows.indexOf(sel);
       this.scroll.scroll_to_item(shown === 1 ? 0 : shown);
     }
-    const github = shared("inbox.github"), digest = shared("inbox.digest"), sl = digest?.state?.slack, face = this.face;
+    const github = shared("inbox.github"), sl = this.slack, face = this.face;
     // 見出しの commitment の時刻と error は、出している面の view の物
     const cm = face === "commitments" ? this.cm.view : this.commitments;
-    const error = (face === "commitments" ? this.cm.error : this.commitmentError) ?? digest?.error ?? (sl && !sl.connected ? "Slack connector is not signed in" : sl?.error) ?? "";
+    const error = (face === "commitments" ? this.cm.error : this.commitmentError ?? this.slackError) ?? "";
     const top = (id, label, action) => div().id(id).flex_none().px(6).h(22).flex().items_center().rounded(5).text_size(11).text_color(t.dim).cursor_pointer()
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => action(cx)).child(label);
     return v_flex().id("inbox").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx, list, at))
@@ -267,7 +264,9 @@ export default class Inbox extends View {
           .rounded(6).text_size(12).cursor_pointer().text_color(f === face ? t.foreground : t.muted).when(f === face, el => el.bg(t.selected)).hover(s => s.bg(t.hover))
           .on_click((_e, cx) => { this.show(f, cx); this.handle.focus(); cx.notify(); }).child(`${i + 1} ${FACE[f]}`))))
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(error))
-        .when(Boolean(sl), el => el.child(top("in-sweep", sl.running ? "sweeping…" : sl.lastAt ? `Slack ${ago(sl.lastAt)}` : "Slack", cx => ask(cx, "/slack/sweep"))))
+        // Slack を集めるのも aw-secretary の collect で、その時刻を出す
+        .when(face === "inbox" && Boolean(sl), el => el.child(div().flex_none().px(6).text_size(11).text_color(t.dim)
+          .child(sl.lastCollectAt ? `Slack ${ago(Date.parse(sl.lastCollectAt))}` : "Slack")))
         // collect の最中は commitment を変えられない
         .when(Boolean(cm) || Boolean(COMMITMENTS) && this.sec.busy, el => el.child(div().flex_none().px(6).text_size(11).text_color(cm?.running ? t.working : t.dim)
           .child(!cm ? "Commitments…" : cm.running ? "collecting…" : cm.lastCollectAt ? `Commitments ${ago(Date.parse(cm.lastCollectAt))}` : "Commitments")))
@@ -275,10 +274,9 @@ export default class Inbox extends View {
       .child(face === "commitments" ? this.cm.render(t, this.handle) : rows.length
         ? v_flex().id("in-body").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.scroll).px(14).pb(12).pt(6).gap(6)
           .children(rows.map(row => row.head ? div().pt(6).text_size(11).font_semibold().text_color(t.muted).child(row.head)
-            : row.slack ? this.slack(t, row, row === sel) : this.card(t, row, row === sel)))
+            : row.slack ? this.slackCard(t, row, row === sel) : this.card(t, row, row === sel)))
         : div().flex_1().p(16).text_color(t.dim).child("Nothing needs you"))
-      .when(face === "inbox" && Boolean(digest?.state), el => el.child(this.standup(t, digest.state.standup)))
       .child(div().flex_none().px(14).py(7).border_t(1).border_color(t.border).truncate().text_size(11).text_color(this.note ? t.muted : t.dim)
-        .child(this.note ?? (face === "commitments" ? this.cm.hint() : this.hint(sel, cm?.running))));
+        .child(this.note ?? (face === "commitments" ? this.cm.hint() : this.hint(sel))));
   }
 }
