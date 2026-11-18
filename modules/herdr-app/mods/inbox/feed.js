@@ -116,7 +116,7 @@ export function waiting() {
   };
 }
 
-// Slack の FYI は数えない。commitment と review 依頼は、Inbox を開いた時に aw-secretary から読むので数えない
+// Slack の FYI は数えない。commitment は、Inbox を開いた時に aw-secretary から読むので数えない
 export function count(w = waiting()) {
   return w.blocked.length + w.done.length + w.failing.length + w.slack.filter(i => i.kind === "ask").length;
 }
