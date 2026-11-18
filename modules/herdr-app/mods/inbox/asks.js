@@ -23,6 +23,7 @@ const WIDE = /[\u3000-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uff60]/;
 let started = false;
 
 // 選ぶ画面の操作の案内、質問の見出しの札 (☐ 次)、hc の注記。質問の中身ではないので拾わない
+// 操作の案内は Claude Code の画面の字。Claude Code を上げて消えたら build が落ちる (../../task-notes.nix の claudeCodeMarks)。ここを変えたら、そちらも合わせる
 const CHROME = /^(?:\d+\.\s*)?(?:Type something\.?|Chat about this)$|Enter to (?:select|confirm)|to navigate|Esc to cancel|^\[hc\]|^[☐☒☑✔←→]/;
 
 // 止まっている agent の画面の最後の数行。たいていは質問か、許可を求める prompt

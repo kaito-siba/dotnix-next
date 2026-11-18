@@ -46,6 +46,7 @@ TIMELINE, RECENT = 200, 12
 # これより長く書かれていない session の file は消す (秒)。閉じた session も、resume で戻る間は残す
 KEEP = 14 * 86400
 # Claude Code が transcript に残す session の名前の entry と、その値の key。端末の title にも同じ物を出す
+# この file が頼る Claude Code の字は ../task-notes.nix の claudeCodeMarks で確かめる。ここを変えたら、そちらも合わせる
 TITLES = {"ai-title": "aiTitle", "custom-title": "customTitle"}
 # session に名前が付くまで、Claude Code が端末に出す title
 UNTITLED = "Claude Code"
@@ -522,6 +523,11 @@ def update(job, base):
     # turn が終わってから書かれる発言があるので、書き込みが止まるのを待ってから読む
     settle(transcript)
     messages = load(transcript)
+    if not messages:
+        # Claude Code が transcript の形を変えると、ここで黙って何も書かなくなる。書けない事を tasks mod に出す
+        if os.path.getsize(transcript):
+            failed(base, "No messages could be read from the transcript. Claude Code may have changed its format (task-notes.py load).")
+        return
     out = base.with_suffix(".json")
     prev = read_json(out)
     start = since(messages, (prev or {}).get("through"))

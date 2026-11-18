@@ -164,6 +164,8 @@ export default class Tasks extends View {
     if (!this.loaded) return [this.empty(t, "Loading…")];
     if (!p?.session) return [this.empty(t, p?.source === "sbx"
       ? "Can't tell which session in the sandbox this is yet. It shows up after the agent's next turn."
+      // Claude Code が動いているのに session id を引けないのは、Claude Code が sessions/<pid>.json の置き方を変えた時
+      : p?.source === "claude" ? "Claude Code is running here, but its session id couldn't be read from ~/.claude/sessions/<pid>.json. Claude Code may keep it elsewhere now."
       : "Only Claude Code sessions are summarized.")];
     if (!n) return [this.empty(t, this.writing ? "Writing the first summary…" : "No summary yet. It appears after the agent's next turn.")];
 

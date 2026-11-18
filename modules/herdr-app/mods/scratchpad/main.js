@@ -2,6 +2,7 @@
 // s を押した時と、pane から session を決められない時は、その folder で動いた全 session を新しい順で並べる
 // 人に見せるファイルは scratchpad の out/ に置く約束 (Claude Code 側の指示で決めている)。既定では out/ だけを並べる
 // scratchpad は <tmp>/claude-<uid>/<cwd の英数字以外を - にした名前>/<session id>/scratchpad にある
+// この置き方は Claude Code が約束していない。頼っている字は ../../task-notes.nix の claudeCodeMarks で確かめる
 import { mkdir, readFile, readdir, unlink } from "fs/promises";
 import { View, div, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, Scrollbar, v_virtual_list, VirtualListScrollHandle, InputState, Input } from "gpui-base";

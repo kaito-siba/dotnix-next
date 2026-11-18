@@ -31,9 +31,73 @@
           }
         ];
       };
+
+      # Claude Code が約束していない物 (画面の字、transcript の形、hook に渡す key、
+      # 一時 folder の置き方) に頼っている所と、その頼りにしている字。Claude Code を
+      # 上げて、これらの字が binary から消えたら build を落とす (同梱の layout と mod
+      # の写しを ./_app-home.nix で確かめるのと同じ)。字が残ったまま使い方が変わった
+      # 時は、task-notes の .error と tasks mod が実行中に出す。sbx の sandbox の中の
+      # Claude Code は nix の外で上がるので、ここでは確かめられない。
+      claudeCodeMarks = {
+        "task-notes/task-notes.py" = [
+          # transcript の entry と、session の名前の entry (TITLES)
+          "isMeta"
+          "isCompactSummary"
+          "ai-title"
+          "aiTitle"
+          "custom-title"
+          "customTitle"
+          # user の entry に Claude Code が足す物 (INSERTED)
+          "<system-reminder>"
+          "<local-command"
+          "[Request interrupted"
+          "Caveat:"
+          # Stop hook に渡る key
+          "transcript_path"
+          "last_assistant_message"
+          # 要約に使う claude -p
+          "json-schema"
+          "structured_output"
+          "no-session-persistence"
+          "max-budget-usd"
+        ];
+        # 選ぶ画面の操作の案内 (CHROME)
+        "mods/inbox/asks.js" = [
+          "Enter to select"
+          "to navigate"
+          "Esc to cancel"
+          "Type something"
+          "Chat about this"
+        ];
+        "mods/scratchpad/main.js" = [
+          "CLAUDE_CODE_TMPDIR"
+          "scratchpad"
+        ];
+      };
+      claudeCode = config.programs.claude-code.package;
+      claudeCodeCheck = pkgs.runCommand "task-notes-claude-code-check" { } ''
+        missing=0
+        while IFS=$'\t' read -r file mark; do
+          grep -rqaF -- "$mark" ${claudeCode}/bin \
+            || { echo "Claude Code ${claudeCode.version} に '$mark' が無い: ./modules/herdr-app/$file を合わせる" >&2; missing=1; }
+        done < ${
+          pkgs.writeText "claude-code-marks" (
+            lib.concatStrings (
+              lib.mapAttrsToList (file: marks: lib.concatMapStrings (mark: "${file}\t${mark}\n") marks) claudeCodeMarks
+            )
+          )
+        }
+        [ "$missing" = 0 ] || exit 1
+        touch $out
+      '';
     in
     {
       home.packages = [ task-notes ];
+
+      # Claude Code を nix で入れていない machine では確かめない。
+      home.extraDependencies = lib.optional (
+        config.programs.claude-code.enable && claudeCode != null
+      ) claudeCodeCheck;
 
       # hc events は core が再起動すると切れるので、落ちたら起こし直す。
       systemd.user.services.task-notes = lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
