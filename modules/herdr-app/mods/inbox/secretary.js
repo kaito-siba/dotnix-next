@@ -12,16 +12,19 @@ export class Secretary {
     this.busy = false; this.queued = null; this.writing = false;
     // 送る順を待っている読み。key ごとに最後の 1 つだけを送る
     this.reads = new Map();
+    // この dialog で書いた操作の取り消しの token と、取り消した時に出す label。新しい物が後ろ
+    this.undos = [];
   }
 
   // 答えを待っている書き込みがあるか
   waiting() { return Boolean(this.queued) || this.writing; }
 
   // 書き込みは、前の書き込みの答えを待っている間は受けない。受けなかった時は false。読みの答えを待っている間は、その後に送る
-  // done は ({ answer, error, running }, cx) を受ける。error の時の running は、collect の最中の 503 の印
-  write(cx, path, body, done) {
+  // done は ({ answer, error, running, status }, cx) を受ける。error の時の running は、collect の最中の 503 の印。status は落ちていて答えが無い時は null
+  // undo は取り消す時に出す { label, id, title }。答えに token があれば積む
+  write(cx, path, body, done, undo) {
     if (!this.url || this.waiting()) return false;
-    this.queued = { path, body, done };
+    this.queued = { path, body, done, undo };
     this.next(cx);
     return true;
   }
@@ -49,18 +52,20 @@ export class Secretary {
     }
     this.busy = true;
     cx.spawn(async cx => {
-      const got = { answer: null, error: null, running: false };
+      const got = { answer: null, error: null, running: false, status: null };
       try {
         const r = await (job.body
           ? fetch(`${this.url}${job.path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(job.body) })
           : fetch(`${this.url}${job.path}`));
         const j = await r.json().catch(() => null);
+        got.status = r.status;
         if (r.ok && j) got.answer = j;
         else { got.error = j?.error ?? `aw-secretary answered ${r.status}`; got.running = j?.running ?? false; }
       } catch (e) { got.error = String(e?.message ?? e); }
       finally {
         this.busy = false;
         if (job.body) this.writing = false;
+        if (job.undo && got.answer?.undo) this.undos.push({ ...job.undo, token: got.answer.undo });
         job.done(got, cx);
         this.next(cx);
         cx.notify();

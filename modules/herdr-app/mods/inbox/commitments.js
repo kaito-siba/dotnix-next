@@ -58,7 +58,7 @@ export class Commitments {
 
   load(cx) {
     this.stale = false;
-    this.sec.read(cx, "open", "/commitments?view=open", (got, cx) => { this.take(got); this.want(cx); });
+    this.sec.read(cx, "open", "/commitments?view=open", (got, cx) => { this.take(got); this.reveal(); this.want(cx); });
   }
 
   reload(cx) { this.details.clear(); this.load(cx); }
@@ -93,11 +93,16 @@ export class Commitments {
     this.want(cx);
   }
 
+  // 選んでいる行を見せる。書いた後や読み直した後は、その行が別の節へ移っている事がある
+  reveal() {
+    const rows = this.rows(), sel = this.selected(rows);
+    if (sel) this.scroll.scroll_to_item(rows.indexOf(sel), "center");
+  }
+
   // 絞り込みが変わると選んでいる行も変わるので、その行を見せて詳細を読む
   refilter(filter, cx) {
     this.filter = filter;
-    const rows = this.rows(), sel = this.selected(rows);
-    if (sel) this.scroll.scroll_to_item(rows.indexOf(sel), "center");
+    this.reveal();
     this.want(cx);
     cx.notify();
   }
@@ -110,20 +115,25 @@ export class Commitments {
   }
 
   // 書いて、答えの open の view で置き換える。Inbox の面の view は読み直す。答えを待つ間に Inbox の面へ移っていればすぐに、居なければその面を出す時に
-  write(cx, path, body, then) {
+  // undo は取り消しの token を積む時の label (./secretary.js の write)
+  write(cx, path, body, then, undo) {
     if (this.view?.running) { this.owner.note = COLLECTING; return; }
     const sent = this.sec.write(cx, path, body, (got, cx) => {
       if (this.owner.note === WAITING) this.owner.note = null;
       this.owner.inboxStale = true;
       if (this.owner.face === "inbox") this.owner.load(cx);
-      then?.(got);
+      then?.(got, cx);
       this.take(got);
+      this.reveal();
       this.want(cx);
-    });
+    }, undo);
     if (!sent) this.owner.note = WAITING;
   }
 
-  change(cx, c, body) { this.write(cx, `/commitments/${c.id}?view=open`, body, () => this.details.delete(c.id)); }
+  change(cx, c, body) {
+    const label = "status" in body ? body.status : "notes" in body ? "memo" : Object.keys(body)[0];
+    this.write(cx, `/commitments/${c.id}?view=open`, body, () => this.details.delete(c.id), { label, id: c.id, title: c.title });
+  }
 
   // 入力欄を開く (使い道と、開いた key と、初めの値)、または閉じる
   type(mode, cx, key = null, value = "") {
@@ -141,7 +151,7 @@ export class Commitments {
   submit(cx) {
     const mode = this.typing, v = this.input.value().trim(), c = this.view?.items.find(c => c.id === this.target);
     this.type(null, cx);
-    if (mode === "source" && v) this.write(cx, "/sources?view=open", { url: v }, got => { if (got.answer?.id) this.sel = got.answer.id; });
+    if (mode === "source" && v) this.write(cx, "/sources", { url: v }, (got, cx) => this.registered(got, cx));
     else if (mode === "filter") return;
     // 入力している間に読み直して、その commitment が open でなくなった
     else if (!c) this.owner.note = "The commitment was closed while you were typing. Nothing was saved";
@@ -149,8 +159,20 @@ export class Commitments {
     else if (mode === "memo") this.change(cx, c, { notes: v || null });
     else if (mode === "title" && v) this.change(cx, c, { title: v });
     else if (mode === "correct" && v) this.write(cx, `/commitments/${c.id}/corrections?view=open`, { text: v }, got => {
-      if (got.answer) { this.owner.note = `Recorded. ${got.answer.reprocess ?? 0} raw items will be extracted again`; this.details.delete(c.id); }
-    });
+      if (got.answer) { this.owner.note = "Recorded. Its raw items will be extracted again at the next extract"; this.details.delete(c.id); }
+    }, { label: "correction", id: c.id, title: c.title });
+  }
+
+  // POST /sources の答えは view ではないので、open の view を読み直す。新しく足した URL の commitment は、抽出が済むまで出ない
+  registered(got, cx) {
+    const a = got.answer;
+    if (!a) return;
+    // 紐付いた commitment を選ぶ。絞り込みに合わない事があるので、絞り込みは外す
+    if (a.commitment) { this.sel = a.commitment; this.filter = ""; }
+    this.owner.note = got.status === 200 ? `${a.source.label} is already watched${a.commitment ? ` (#${a.commitment})` : ""}`
+      : a.extracting ? `Registered ${a.source.label}. It is being extracted now; press r in a moment`
+      : `Registered ${a.source.label}. It will be extracted at the next collect`;
+    this.load(cx);
   }
 
   // 発生源を開く。複数あれば選ばせる
@@ -170,11 +192,15 @@ export class Commitments {
     });
   }
 
+  // この dialog で書いた操作を、新しい物から 1 つ取り消す。aw-secretary が断った token も捨てる (他の書き込みとぶつかった、期限が切れた等)
   undo(cx) {
-    this.write(cx, "/undo?view=open", {}, got => {
-      const u = got.answer?.undone;
-      if (got.answer) this.owner.note = u ? `Undid ${u.label}: ${u.title}` : "Nothing to undo";
-      if (u?.id) { this.sel = u.id; this.details.delete(u.id); }
+    const u = this.sec.undos.at(-1);
+    if (!u) { this.owner.note = "Nothing to undo in this dialog"; return; }
+    this.write(cx, "/undo?view=open", { token: u.token }, got => {
+      if (got.status !== null) this.sec.undos.splice(this.sec.undos.indexOf(u), 1);
+      if (!got.answer) return;
+      this.owner.note = `Undid ${u.label}: #${u.id} ${u.title}`;
+      this.sel = u.id; this.details.delete(u.id);
     });
   }
 
@@ -278,7 +304,8 @@ export class Commitments {
   detail(t, c) {
     const d = c ? this.details.get(c.id) : null, notes = c && this.notes(c);
     const meta = c && [`#${c.id}`, STATUS[c.status], c.due && `〆${c.due}`, REASON[c.reason]].filter(Boolean).join(" · ");
-    return v_flex().id("cm-detail").w(300).flex_none().min_h(0).overflow_y_scrollbar().border_l(1).border_color(t.border).bg(t.surface).px(14).py(12).gap(12)
+    // 詳細の欄は dialog の幅の 4 割で、狭い時も 320px は取る
+    return v_flex().id("cm-detail").w_2_5().min_w(320).flex_none().min_h(0).overflow_y_scrollbar().border_l(1).border_color(t.border).bg(t.surface).px(14).py(12).gap(12)
       .when(Boolean(this.typing) && this.typing !== "filter", el => el.child(this.field(t)))
       .when(!c, el => el.child(div().text_color(t.dim).child(this.view ? "No commitment selected" : "")))
       .when(Boolean(c), el => el
