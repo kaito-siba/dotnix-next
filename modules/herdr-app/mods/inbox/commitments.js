@@ -192,7 +192,7 @@ export class Commitments {
     });
   }
 
-  // この dialog で書いた操作を、新しい物から 1 つ取り消す。列は aw-secretary が dialog ごとに持ち、Inbox の面の Slack の行の操作も入る。戻せない時の理由 (列が空、後に別の書き込みがあった) は見出しに出る
+  // この dialog で書いた操作を、新しい物から 1 つ取り消す。列は aw-secretary が dialog ごとに持ち、Inbox の面の Slack の行の操作も入る。戻せない時の理由 (列が空、後に別の書き込みがあった) は、この面では見出しに、Inbox の面では下端に出す
   // 落ちて答えが無かった取り消しは、aw-secretary で済んだかが分からない。送り直すと 1 つ前の操作まで戻るので、次の u は 1 度止めて知らせる
   undo(cx) {
     if (this.unsure) {
@@ -206,7 +206,7 @@ export class Commitments {
       this.unsure = !got.answer && (got.status === null || got.status < 300);
       // 答えには Slack の view も付くので、Inbox の面の Slack の行も置き換える
       if (got.answer?.slack) this.owner.slack = got.answer.slack;
-      if (!u) return;
+      if (!u) { if (this.owner.face === "inbox") this.owner.note = got.error; return; }
       if (u.target === "slack") { this.owner.note = `Undid ${u.label}${u.title ? `: ${u.title}` : ""}`; return; }
       this.owner.note = `Undid ${u.label}: #${u.id} ${u.title ?? ""}`;
       this.sel = u.id; this.details.delete(u.id);
