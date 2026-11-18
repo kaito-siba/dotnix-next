@@ -1,4 +1,4 @@
-// file を yazi のように hjkl で辿って preview する面。2 つの mod が使う (../../_show.nix が両方へ写す)
+// file を yazi のように hjkl で辿って preview する面。2 つの mod が使う (../../_app-home.nix が両方へ写す)
 //   explorer  focus している pane の folder から辿る (./main.js)
 //   sandbox   sbx の sandbox の中を辿る (../sandbox/main.js)
 // file の取り方だけが違うので、それは source として受け取る

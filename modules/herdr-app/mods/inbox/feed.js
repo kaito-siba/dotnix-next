@@ -1,6 +1,6 @@
-// Inbox の中身を取りに行く側。2 つの mod が読み込む (../../_show.nix が両方へ写す)
+// Inbox の中身を取りに行く側。2 つの mod が読み込む (../../_app-home.nix が両方へ写す)
 //   inbox      開いている間だけ生きるモーダル (./main.js)。操作した時に取り直す
-//   show-tabs  いつも出ているタブバー。数分おきに見に行き、件数をボタンに出す
+//   panel-tabs いつも出ているタブバー。数分おきに見に行き、件数をボタンに出す
 // 取った物は shared に置き、モーダルと tasks mod が読む
 //   "inbox.github"   { prs, at }      開いている pane の branch の pull request と CI
 import { svg } from "gpui-kit";

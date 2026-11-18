@@ -1,6 +1,6 @@
 // mod が開く folder を、pane で動く agent が今居る所に合わせる。agent の居場所は、その machine の task-notes where に訊く (./task-notes.py)
 // pane の folder では足りない: Claude Code は EnterWorktree で worktree へ移り、sbx の sandbox の中の agent の folder は host の process から見えない
-// mod は自分の folder の外を import できないので、nix がこの file を使う mod の folder へコピーする (../_show.nix)
+// mod は自分の folder の外を import できないので、nix がこの file を使う mod の folder へコピーする (../_app-home.nix)
 import { spaces, panes, focused, exec } from "herdr";
 
 // focus している pane の場所。where で agent の居場所が分からない時は、この cwd と branch を使う
