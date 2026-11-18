@@ -44,10 +44,11 @@ export default class Tasks extends View {
     return Boolean(panel) && !panel.hidden && body?.active === "tasks";
   }
 
-  // focus が agent の端末にあればそれに乗り換える。agent でない所への focus では動かない
+  // focus している端末が agent ならそれに乗り換える。agent でない所への focus では動かない
+  // focused().agent は見ない: focus と別に持たれる「agent の block が出す agent」で、agent でない pane に focus しても他の agent を指す
   track() {
     const f = focused(), list = agents();
-    const here = list.find(a => a.address === (f?.shown ?? f?.terminal)) ?? (f?.agent ? list.find(a => a.address === f.agent) : null);
+    const here = list.find(a => a.address === (f?.shown ?? f?.terminal));
     if (here && here.address !== this.follow) {
       this.follow = here.address;
       this.note = null; this.error = null; this.writing = false; this.place = null; this.loaded = false; this.open.clear();
