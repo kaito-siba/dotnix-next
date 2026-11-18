@@ -1,9 +1,8 @@
 {
-  # herdr の tab ごとに、そこで動く Claude Code が何をしているかの要約を書く
+  # herdr の端末で動く Claude Code の session ごとに、何をしているかの記録を書く
   # (./task-notes/task-notes.py)。herdr-app の tasks mod がそれを出す。
-  # Claude Code の Stop hook から呼ばれる。最初の要約はファイルを書き換えた
-  # turn の後に作り、要約のある tab では turn のたびに、裏で Haiku を 1 回
-  # 走らせる (subscription の枠を使う)。herdr の端末の外では何もしない。agent の
+  # Claude Code の Stop hook から呼ばれ、turn のたびに裏で Haiku を 1 回走らせる
+  # (subscription の枠を使う)。herdr の端末の外では何もしない。agent の
   # 動く machine に要るので、herdr-app を入れる全ての machine に入れる。
   # sbx の sandbox の中の Claude Code は Stop hook を持たないので、host の service
   # (task-notes watch) が端末の状態から turn の終わりを見つける。herdr-app の mod は

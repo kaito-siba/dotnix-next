@@ -190,6 +190,10 @@ runCommand "herdr-app-show"
     install -m644 ${./mods/cheki-agents/phone.svg} $out/mods/cheki-agents/phone.svg
     install -m644 ${./mods/cheki-agents/zzz.svg} $out/mods/cheki-agents/zzz.svg
     install -m644 ${./mods/cheki-agents/dots.svg} $out/mods/cheki-agents/dots.svg
+    # 色と字と状態の印 (./mods/cheki-agents/lycoreco.js) は、右パネルの Tasks と分け合う。
+    # Tasks は link で置く mod (./herdr-app.nix) なので、その folder にもこの木からコピーする。
+    install -m644 ${./mods/cheki-agents/lycoreco.js} $out/mods/cheki-agents/lycoreco.js
+    install -Dm644 ${./mods/cheki-agents/lycoreco.js} $out/mods/tasks/lycoreco.js
     install -m644 ${./mods/inbox/asks.js} $out/mods/cheki-agents/asks.js
     # 丸い字。app は mod の fonts から読むので、system には入れない。
     ${lib.concatMapStringsSep "\n" (
