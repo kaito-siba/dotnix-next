@@ -304,20 +304,22 @@ export class Commitments {
   detail(t, c) {
     const d = c ? this.details.get(c.id) : null, notes = c && this.notes(c);
     const meta = c && [`#${c.id}`, STATUS[c.status], c.due && `〆${c.due}`, REASON[c.reason]].filter(Boolean).join(" · ");
-    // 詳細の欄は dialog の幅の 4 割で、狭い時も 320px は取る
-    return v_flex().id("cm-detail").w_2_5().min_w(320).flex_none().min_h(0).overflow_y_scrollbar().border_l(1).border_color(t.border).bg(t.surface).px(14).py(12).gap(12)
-      .when(Boolean(this.typing) && this.typing !== "filter", el => el.child(this.field(t)))
-      .when(!c, el => el.child(div().text_color(t.dim).child(this.view ? "No commitment selected" : "")))
-      .when(Boolean(c), el => el
-        .child(v_flex().flex_none().gap(4).child(div().text_size(15).font_semibold().child(c.title)).child(div().text_size(11).text_color(t.dim).child(meta)))
-        .when(Boolean(c.summary), el => el.child(this.section(t, "SUMMARY", div().text_size(12.5).child(c.summary))))
-        .when(Boolean(notes), el => el.child(this.section(t, "MEMO", div().text_size(12.5).child(notes))))
-        .when(Boolean(c.sources.length), el => el.child(this.section(t, "SOURCES", v_flex().text_size(12.5)
-          .children(c.sources.map(s => div().truncate().child(`${s.source === "github" ? "G" : "S"} ${s.label ?? s.key}`))))))
-        .child(this.section(t, "HISTORY", d ? v_flex().gap(1).text_size(11.5).text_color(t.muted)
-          .children((d.events ?? []).map(e => h_flex().gap(10).child(div().flex_none().text_size(10.5).text_color(t.dim).child(stamp(e.at)))
-            .child(div().flex_1().min_w(0).child(e.detail ? `${e.kind}: ${e.detail}` : e.kind))))
-          : div().text_size(11.5).text_color(t.dim).child("Loading…"))));
+    // 詳細の欄は dialog の幅の 4 割で、狭い時も 320px は取る。幅と地は scroll する要素の外の枠に付ける: overflow_y_scrollbar の要素に割合の幅を付けると、中身の側にも同じ割合が掛かり、地が狭く塗られる
+    // 入力欄は scroll する要素の外に置く。詳細を下まで scroll していても見える
+    return v_flex().w_2_5().min_w(320).flex_none().border_l(1).border_color(t.border).bg(t.surface)
+      .when(Boolean(this.typing) && this.typing !== "filter", el => el.child(this.field(t).px(14).pt(12)))
+      .child(v_flex().id("cm-detail").flex_1().min_h(0).overflow_y_scrollbar().px(14).py(12).gap(12)
+        .when(!c, el => el.child(div().text_color(t.dim).child(this.view ? "No commitment selected" : "")))
+        .when(Boolean(c), el => el
+          .child(v_flex().flex_none().gap(4).child(div().text_size(15).font_semibold().child(c.title)).child(div().text_size(11).text_color(t.dim).child(meta)))
+          .when(Boolean(c.summary), el => el.child(this.section(t, "SUMMARY", div().text_size(12.5).child(c.summary))))
+          .when(Boolean(notes), el => el.child(this.section(t, "MEMO", div().text_size(12.5).child(notes))))
+          .when(Boolean(c.sources.length), el => el.child(this.section(t, "SOURCES", v_flex().text_size(12.5)
+            .children(c.sources.map(s => div().truncate().child(`${s.source === "github" ? "G" : "S"} ${s.label ?? s.key}`))))))
+          .child(this.section(t, "HISTORY", d ? v_flex().gap(1).text_size(11.5).text_color(t.muted)
+            .children((d.events ?? []).map(e => h_flex().gap(10).child(div().flex_none().text_size(10.5).text_color(t.dim).child(stamp(e.at)))
+              .child(div().flex_1().min_w(0).child(e.detail ? `${e.kind}: ${e.detail}` : e.kind))))
+            : div().text_size(11.5).text_color(t.dim).child("Loading…")))));
   }
 
   // 面の上に重ねる一覧
@@ -352,14 +354,15 @@ export class Commitments {
           .track_scroll(this.scroll).size_full().px(6).pb(6)
           .on_item_click((key, cx) => { const r = rows.find(r => r.key === key); if (r?.item) { this.sel = r.item.id; this.want(cx); } handle.focus(); cx.notify(); }))
         .child(Scrollbar.vertical("cm-list").absolute().inset_0());
-    return h_flex().flex_1().min_h(0).relative()
-      .child(v_flex().flex_1().min_w(0).min_h(0)
+    // 一覧と詳細の並べ方は explorer と pr の mod に揃える。h_flex は既定で子を縦の真ん中に置き、中身の高さに縮める。items_start で真ん中に置くのをやめ、h_full で縦いっぱいにする。virtual list は高さが決まらないと描けない
+    return h_flex().flex_1().min_h(0).items_start().relative()
+      .child(v_flex().flex_1().min_w(0).h_full()
         .when(this.typing === "filter" || Boolean(this.filter), el => el.child(h_flex().flex_none().px(14).pt(8).gap(8).items_center()
           .child(div().flex_none().text_size(11).text_color(t.dim).child("/"))
           .child(this.typing === "filter" ? Input.new(this.input).flex_1().h(28).px(8).rounded(7).border_1().border_color(t.accent).bg(t.background).text_size(12)
             : div().flex_1().text_size(12).child(this.filter))))
         .child(list))
-      .child(this.detail(t, sel?.item))
+      .child(this.detail(t, sel?.item).h_full())
       .when(Boolean(this.overlay), el => el.child(this.layer(t)));
   }
 }
