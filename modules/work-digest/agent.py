@@ -285,7 +285,8 @@ def gather(win):
             t = json.loads(path.read_text())
         except (OSError, ValueError):
             continue
-        if not inside(t.get("updatedAt", 0)):
+        # 要約でない file が置かれていても止まらない
+        if not isinstance(t, dict) or not inside(t.get("updatedAt", 0)):
             continue
         done = [x["text"] for x in t.get("steps", []) if x.get("state") == "done"][:5]
         tasks.append(f"{t.get('title')}: {t.get('goal')}" + (f" Done: {'; '.join(done)}" if done else ""))
