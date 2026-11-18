@@ -22,14 +22,24 @@ const WIDE = /[\u3000-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uff60]/;
 // app を起動し直すと seq を 0 から数え直すので、前の起動で置いた物は seq が合っても使えない。見分けも付かないので、mod ごとに起動して最初の 1 度は、置いてある物を全て捨てて読み直す
 let started = false;
 
+// 選ぶ画面の操作の案内、質問の見出しの札 (☐ 次)、hc の注記。質問の中身ではないので拾わない
+const CHROME = /^(?:\d+\.\s*)?(?:Type something\.?|Chat about this)$|Enter to (?:select|confirm)|to navigate|Esc to cancel|^\[hc\]|^[☐☒☑✔←→]/;
+
 // 止まっている agent の画面の最後の数行。たいていは質問か、許可を求める prompt
-// 質問とその選択肢が続いている時は、質問から始める
+// 質問があれば、質問と番号の付いた選択肢だけを拾う。選ぶ画面は選択肢の説明と操作の案内で質問の後ろが長くなるので、質問は下から 30 行まで探す
 export function snippet(text) {
+  // 枠の罫線と選択中の印を落とす。字の無い行は、段落の切れ目として空にして残す
   const lines = (text ?? "").split("\n")
-    .map(l => l.replace(/[│─╭╮╰╯┌┐└┘├┤┬┴┼═║▔▁▏▕]/g, " ").replace(/\s+/g, " ").trim())
-    .filter(l => /[\p{L}\p{N}]/u.test(l));
-  const tail = lines.slice(-8), asked = tail.findLastIndex(l => /[?？]$/.test(l));
-  return (asked >= 0 ? tail.slice(asked) : lines.slice(-4)).join(" · ").slice(0, 240);
+    .map(l => l.replace(/[│─╭╮╰╯┌┐└┘├┤┬┴┼═║▔▁▏▕]/g, " ").replace(/\s+/g, " ").trim().replace(/^[❯›]\s*/, ""))
+    .map(l => /[\p{L}\p{N}]/u.test(l) && !CHROME.test(l) ? l : "")
+    .slice(-30);
+  const asked = lines.findLastIndex(l => /[?？]$/.test(l));
+  if (asked < 0) return lines.filter(Boolean).slice(-4).join(" · ").slice(0, 240);
+  // 質問が折り返されていれば、同じ段落の前の 2 行まで足す。選択肢の説明の行は落とす
+  let start = asked;
+  while (start > asked - 2 && lines[start - 1]) start--;
+  const options = lines.slice(asked + 1).filter(l => /^\d+\.\s/.test(l));
+  return [lines.slice(start, asked + 1).join(" "), ...options].join(" · ").slice(0, 240);
 }
 
 // list は止まっている agent を全て含む物 (agents() 等)。含まれない agent の抜粋は捨てる
