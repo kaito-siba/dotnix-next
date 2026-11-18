@@ -1,10 +1,8 @@
 // 返事を待っている agent の画面の最後を読んで、質問の抜粋を shared の "inbox.asks" に { [address]: { seq, text, at } } で置く
 // text が null の間は、at (ms) に読み始めて、まだ読み終えていない。どちらの mod が読んでいるかは問わない
 // 2 つの mod が読み込む (../../_show.nix が両方へ写す)
-//   backdrop-agents  いつも出ている左バーの Agents の一覧。止まった agent をすぐ読みに行き、行の下に抜粋を出す
-//   inbox            開いている間だけ生きるモーダル (./main.js)。置かれた抜粋を使い、無い時だけ自分で読みに行く
-import { div } from "gpui-kit";
-import { v_flex } from "gpui-base";
+//   cheki-agents  いつも出ている左バーの Agents の一覧。止まった agent をすぐ読みに行き、行の下に抜粋を出す
+//   inbox         開いている間だけ生きるモーダル (./main.js)。置かれた抜粋を使い、無い時だけ自分で読みに行く
 import { hc, shared, setShared } from "herdr";
 
 const KEY = "inbox.asks";
@@ -13,16 +11,10 @@ const WAIT = 1000;
 // 読み始めてからこれだけ経っても置かれていなければ、その後の描画で読み直す (ms)。読んでいる mod が閉じると、その読みは途切れる。読めなかった時も置かない
 const STALE = 10000;
 
-// 左バーの抜粋の見た目。一覧の下に敷いた絵の顔に被らないよう、短く切る
+// 左バーの抜粋の長さ。一覧が下のチェキに届かないよう、短く切る
 const LINES = 2;
-// 1 行に入る字数の目安。全角を 2 と数え、LINES 行分を超えたら … で切る。読み違えて溢れた分は LINES 行の高さで切る
+// 1 行に入る字数の目安。全角を 2 と数え、LINES 行分を超えたら … で切る。読み違えて溢れた分は、左バーが LINES 行の高さで切る
 const COLUMNS = 32;
-const SIZE = 11.5;
-const LEADING = 15;
-// 字の左端を、行の icon の右の名前に揃える
-const INDENT = 33;
-// 地の色。t.chrome の後に付ける alpha ("cc" 等)。null は塗らない
-const FILL = null;
 
 // 全角に数える字: CJK の記号、かな、漢字、ハングル、全角の英数と記号
 const WIDE = /[\u3000-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uff60]/;
@@ -69,7 +61,8 @@ export function askOf(a) {
   return ask?.seq === a.seq && ask.text ? ask.text : null;
 }
 
-function clip(text) {
+// 左バーに出す長さに切った抜粋
+export function clip(text) {
   const chars = [...text];
   let width = 0;
   for (let i = 0; i < chars.length; i++) {
@@ -77,14 +70,4 @@ function clip(text) {
     if (width > LINES * COLUMNS) return `${chars.slice(0, i).join("").trimEnd()}…`;
   }
   return text;
-}
-
-// 左バーの agent の行 (el) の下に、抜粋を足す。sidebar を畳んでいる間は足さない
-export function withAsk(el, a, t, collapsed) {
-  const text = collapsed ? null : askOf(a);
-  if (!text) return el;
-  return v_flex().flex_none().child(el)
-    .child(div().ml(INDENT).mr(8).mb(6).max_h(LINES * LEADING).overflow_hidden().text_size(SIZE).line_height(`${LEADING}px`).text_color(t.muted)
-      .when(FILL !== null, d => d.rounded(4).bg(t.chrome + FILL))
-      .child(clip(text)));
 }

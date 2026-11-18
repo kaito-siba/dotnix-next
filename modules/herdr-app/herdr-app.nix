@@ -23,8 +23,8 @@ in
       # (主にスクリーンショット) を並べる右パネル。開いて注釈を描き、その
       # コピーを保存したり prompt に貼り戻したりできる。中身は ./show、
       # 組み立ては ./_show.nix。Show を足した layout (lycoreco) もここで作る。
-      # Agents の一覧の下には絵を敷ける: 画像は repo に入れず、
-      # ~/.config/herdr-app/backgrounds/sidebar.png に置く (./backdrop)。
+      # Agents の一覧の下のチェキには絵を入れられる: 画像は repo に入れず、
+      # ~/.config/herdr-app/backgrounds/sidebar.png に置く (./mods/cheki-agents)。
       show = pkgs.callPackage ./_show.nix {
         appVersion = herdr-app.version;
         commitmentsUrl = cfg.commitmentsUrl;
