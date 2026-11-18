@@ -1,16 +1,21 @@
 // 自分の手を待っている物を 1 か所に並べるモーダル。key で選んで、開く、URL を copy する、session に貼る
 // 許可や返事を待っている agent、見ていない間に終わった agent、Slack の依頼、aw-secretary の commitment (自分への約束) のうち手を付けるべき物、自分の branch の pull request で落ちた CI、自分宛の review 依頼
 // 中身を取りに行くのは ./feed.js と ./asks.js。開いていない間はタブバーと左バーの Agents の一覧が見に行き、ここは shared に置かれた物を読む
+// commitment だけは、開いた時にここで aw-secretary に聞き、答えもここに持つ
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { panes, focused, run, notify, theme, shared, props, closeOverlay } from "herdr";
-import { waiting, checking, refresh, ask, secretary, writing, consult } from "./feed.js";
+import { waiting, checking, refresh, ask } from "./feed.js";
 import { readAsks, askOf } from "./asks.js";
+// aw-secretary の API の URL。使わない machine では null (nix が書く: ../../_show.nix)
+import { COMMITMENTS } from "./env.js";
 
 // commitment が Inbox に出ている訳 (reason) の見出しと、行の印の色
 const REASONS = { triage: ["triage", "accent"], overdue: ["overdue", "blocked"], due_soon: ["due soon", "working"], maybe_done: ["done?", "done"] };
 // commitment の行で状態を決める key。Slack の行では d と s は tick と skip
 const DECIDE = { a: "active", x: "rejected", d: "done", s: "later", w: "waiting" };
+// 答えを待っている間に key を押した時の note。答えが返ったら消す
+const WAITING = "Waiting for aw-secretary to answer";
 
 // Slack の permalink を、aw-secretary の links の key (slack:<channel>:<thread の root の ts>) にする。返信の permalink は thread_ts の root に寄せる
 const slackKey = url => { const m = /\/archives\/([A-Z0-9]+)\/p(\d+)(\d{6})/.exec(url ?? ""); if (!m) return null; const t = /[?&]thread_ts=(\d+\.\d+)/.exec(url); return `slack:${m[1]}:${t ? t[1] : `${m[2]}.${m[3]}`}`; };
@@ -32,10 +37,12 @@ export default class Inbox extends View {
     this.handle.focus();
     // 開いた直後の focus は dialog の表示に奪われる事があるので、もう一度取る
     cx.timer.after(600, () => this.handle.focus());
+    // commitments は GET /commitments?view=inbox の答えで、読めるまで null
+    this.commitments = null; this.commitmentError = null; this.consulting = false;
     // 開いた時に取り直す。GitHub は前に見てから間が空いている時だけ
     refresh(cx);
     ask(cx);
-    consult(cx);
+    this.consult(cx);
   }
 
   // head が見出しで、他は選べる行。url は copy と paste に使う物で、agent の行には無い。open は Enter で開く物が url と違う時だけ
@@ -44,14 +51,14 @@ export default class Inbox extends View {
     const name = a => (a.title ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").trim() || a.program?.name || "agent";
     const where = a => `${a.space_name} · ${a.tab_name}`;
     const group = (title, list) => list.length ? [{ key: `head:${title}`, head: `${title} · ${list.length}` }, ...list] : [];
-    const links = secretary()?.view?.links ?? {}, mark = key => links[key] ? `#${links[key]}` : null;
+    const links = this.commitments?.links ?? {}, mark = key => links[key] ? `#${links[key]}` : null;
     return [
       ...group("Needs you", w.blocked.map(a => ({ key: `b:${a.address}`, tint: "blocked", title: name(a), side: where(a), body: askOf(a), agent: a.address }))),
       ...group("Finished", w.done.map(a => ({ key: `d:${a.address}`, tint: "done", title: name(a), side: where(a), agent: a.address }))),
       ...group("Slack", w.slack.map(item => ({ key: `s:${item.permalink}`, slack: item, url: item.permalink, mark: mark(slackKey(item.permalink)) }))),
       // Enter と copy と paste は、最初の発生源の URL
-      ...group("Commitments", w.commitments.map(c => ({ key: `m:${c.id}`, commitment: c, tint: REASONS[c.reason]?.[1] ?? "dim", title: c.title, mark: `#${c.id}`,
-        side: [REASONS[c.reason]?.[0] ?? c.reason, c.due && `due ${c.due}`, c.size].filter(Boolean).join(" · "),
+      ...group("Commitments", (this.commitments?.items ?? []).map(c => ({ key: `m:${c.id}`, commitment: c, tint: REASONS[c.reason]?.[1] ?? "dim", title: c.title, mark: `#${c.id}`,
+        side: [REASONS[c.reason]?.[0] ?? c.reason, c.due && `due ${c.due}`].filter(Boolean).join(" · "),
         body: c.summary, url: c.sources[0]?.url ?? null }))),
       // copy と paste は pull request の URL、Enter は落ちた check
       ...group("CI failed", w.failing.map(pr => ({ key: `c:${pr.url}`, tint: "ansi1", title: `#${pr.number} ${pr.title}`, side: pr.branch,
@@ -92,11 +99,38 @@ export default class Inbox extends View {
     ask(cx, "/slack/items", { op, ids: [row.slack.permalink] });
   }
 
+  // aw-secretary に聞く。id が無ければ inbox の view を読むだけ。id があれば body で commitment を変え、変えた後の view を受け取る
+  // 聞くのは開いている Inbox の中で 1 度に 1 つで、答えが返るまで次を送らない。答えの順が入れ替わらず、続けて押した時に server で後の物が先に適用されない
+  // 答えを待ったまま閉じると、次に開いた Inbox はその答えを待たない
+  consult(cx, id, body) {
+    if (!COMMITMENTS || this.consulting) return;
+    this.consulting = true;
+    cx.spawn(async cx => {
+      try {
+        const r = await (id
+          ? fetch(`${COMMITMENTS}/commitments/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+          : fetch(`${COMMITMENTS}/commitments?view=inbox`));
+        if (r.ok) { this.commitments = await r.json(); this.commitmentError = null; }
+        else {
+          // 書けなかった時は前の view を残して error だけを出す。collect の最中の 503 は running: true が付くので、key を止める
+          const e = await r.json().catch(() => null);
+          this.commitmentError = e?.error ?? `aw-secretary answered ${r.status}`;
+          if (e?.running && this.commitments) this.commitments = { ...this.commitments, running: true };
+        }
+      } catch (e) { this.commitmentError = String(e?.message ?? e); }
+      finally {
+        this.consulting = false;
+        if (this.note === WAITING) this.note = null;
+        cx.notify();
+      }
+    });
+  }
+
   // commitment の状態を決める。collect の最中は aw-secretary が書かせないので、送らない
   decide(cx, row, status) {
-    if (secretary()?.view?.running) this.note = "aw-secretary is collecting. Try again when it finishes";
-    else if (writing()) this.note = "Waiting for aw-secretary to answer the last change";
-    else consult(cx, row.commitment.id, { status });
+    if (this.commitments?.running) this.note = "aw-secretary is collecting. Press r after it finishes, then try again";
+    else if (this.consulting) this.note = WAITING;
+    else this.consult(cx, row.commitment.id, { status });
   }
 
   key(e, cx, list, at) {
@@ -113,7 +147,7 @@ export default class Inbox extends View {
     else if (plain && row?.commitment && Object.hasOwn(DECIDE, k)) this.decide(cx, row, DECIDE[k]);
     else if (plain && k === "d") this.settle(cx, row, "tick");
     else if (plain && k === "s") this.settle(cx, row, "skip");
-    else if (plain && k === "r") { refresh(cx, true); ask(cx); consult(cx); }
+    else if (plain && k === "r") { refresh(cx, true); ask(cx); this.consult(cx); }
     // 他の key も下の端末へは流さない
     cx.stop_propagation();
     cx.notify();
@@ -189,7 +223,7 @@ export default class Inbox extends View {
     const keys = ["j/k move", "Enter open"];
     if (row?.url) keys.push("y copy URL", "p paste to session");
     if (row?.slack) keys.push(...(row.slack.kind === "ask" ? ["d done", "s skip"] : ["s seen"]));
-    if (row?.commitment) keys.push(...(collecting ? ["a/x/d/s/w wait until aw-secretary finishes collecting"] : ["a adopt", "x reject", "d done", "s later", "w waiting"]));
+    if (row?.commitment) keys.push(...(collecting ? ["a/x/d/s/w wait until aw-secretary finishes collecting, then r"] : ["a adopt", "x reject", "d done", "s later", "w waiting"]));
     return [...keys, "r refresh", "Esc close"].join(" · ");
   }
 
@@ -208,8 +242,8 @@ export default class Inbox extends View {
       const shown = rows.indexOf(sel);
       this.scroll.scroll_to_item(shown === 1 ? 0 : shown);
     }
-    const github = shared("inbox.github"), digest = shared("inbox.digest"), sl = digest?.state?.slack, sec = secretary(), cm = sec?.view;
-    const error = sec?.error ?? shared("inbox.reviews")?.error ?? digest?.error ?? (sl && !sl.connected ? "Slack connector is not signed in" : sl?.error) ?? "";
+    const github = shared("inbox.github"), digest = shared("inbox.digest"), sl = digest?.state?.slack, cm = this.commitments;
+    const error = this.commitmentError ?? shared("inbox.reviews")?.error ?? digest?.error ?? (sl && !sl.connected ? "Slack connector is not signed in" : sl?.error) ?? "";
     const top = (id, label, action) => div().id(id).flex_none().px(6).h(22).flex().items_center().rounded(5).text_size(11).text_color(t.dim).cursor_pointer()
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => action(cx)).child(label);
     return v_flex().id("inbox").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx, list, at))
@@ -220,8 +254,8 @@ export default class Inbox extends View {
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(error))
         .when(Boolean(sl), el => el.child(top("in-sweep", sl.running ? "sweeping…" : sl.lastAt ? `Slack ${ago(sl.lastAt)}` : "Slack", cx => ask(cx, "/slack/sweep"))))
         // collect の最中は commitment を変えられない
-        .when(Boolean(cm), el => el.child(div().flex_none().px(6).text_size(11).text_color(cm.running ? t.working : t.dim)
-          .child(cm.running ? "collecting…" : cm.lastCollectAt ? `Commitments ${ago(Date.parse(cm.lastCollectAt))}` : "Commitments")))
+        .when(Boolean(cm) || this.consulting, el => el.child(div().flex_none().px(6).text_size(11).text_color(cm?.running ? t.working : t.dim)
+          .child(!cm ? "Commitments…" : cm.running ? "collecting…" : cm.lastCollectAt ? `Commitments ${ago(Date.parse(cm.lastCollectAt))}` : "Commitments")))
         .child(top("in-reload", checking() ? "checking…" : github?.at ? `GitHub ${ago(github.at)}` : "GitHub", cx => refresh(cx, true))))
       .child(rows.length
         ? v_flex().id("in-body").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.scroll).px(14).pb(12).pt(6).gap(6)

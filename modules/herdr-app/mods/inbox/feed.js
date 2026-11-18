@@ -5,20 +5,15 @@
 //   "inbox.github"   { prs, at }      開いている pane の branch の pull request と CI
 //   "inbox.reviews"  { list, error }  自分宛の review 依頼
 //   "inbox.digest"   { state, error } 常駐機の work-digest の状態: Slack の依頼と standup の下書き (modules/work-digest)
-//   "inbox.commitments"  { view, error }  常駐機の aw-secretary の commitment (自分への約束) のうち、手を付けるべき物 (GET /commitments?view=inbox の答え)
 import { svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, agents, exec, run, shared, setShared } from "herdr";
-// work-digest と aw-secretary の API の URL。使わない machine では null (nix が書く: ../../_show.nix)
-import { WORK_DIGEST, COMMITMENTS } from "./env.js";
+// work-digest の API の URL。使わない machine では null (nix が書く: ../../_show.nix)
+import { WORK_DIGEST } from "./env.js";
 
 const TICK = 60000, PULLS = 3 * 60000, REVIEWS = 5 * 60000, MAX_REPOS = 12;
 // sweep や下書きが走っている間は、終わるのを早めに見に行く
 const DIGEST = 60000, DIGEST_BUSY = 10000;
-// commitment は日に 1 度の collect で増えるので間を空ける。collect の最中は、終わるのを早めに見に行く
-const SECRETARY = 5 * 60000, SECRETARY_BUSY = 10000;
-// 書き込みの答えをこれだけ待っても届かなければ、次の書き込みを受ける (ms)。書いた Inbox が閉じると、その答えは届かない
-const WRITING = 30000;
 const FAILED = new Set(["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
 const TRUNK = new Set(["main", "master", "develop", "trunk"]);
 
@@ -26,7 +21,6 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 let busy = false, pulledAt = 0, reviewedAt = 0;
 let asking = false, digestAt = 0;
-let reading = false, consultedAt = 0, sentAt = 0;
 
 // GitHub を見に行っている最中か
 export const checking = () => busy;
@@ -114,61 +108,10 @@ export function ask(cx, path, body) {
   });
 }
 
-// aw-secretary の答え。URL の無い machine では、前に置かれた物 (shared は app を閉じても残る) があっても読まない
-export const secretary = () => COMMITMENTS ? shared("inbox.commitments") ?? null : null;
-
-// 答えを待っている書き込みがあるか。続けて押した時に server で後の物が先に適用されないよう、答えが届くまで次の書き込みは受けない
-export const writing = () => Date.now() - sentAt < WRITING;
-
-// view の新しさは (rev, at) で比べる。rev は DB に書くたびに増え、日付が変わる時と collect が始まる時は rev が同じまま中身が変わる
-const newer = (a, b) => !b || a.rev > b.rev || a.rev === b.rev && a.at >= b.at;
-
-// aw-secretary に聞く。id が無ければ inbox の view を読むだけ。id があれば body で commitment を変え、変えた後の view を受け取る
-export function consult(cx, id, body) {
-  if (!COMMITMENTS || id && writing()) return;
-  const mine = Date.now(), knew = secretary()?.view?.running ?? false;
-  if (id) sentAt = mine;
-  else reading = true;
-  cx.spawn(async cx => {
-    let view = null, error = null, running = false;
-    try {
-      const r = await (id
-        ? fetch(`${COMMITMENTS}/commitments/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-        : fetch(`${COMMITMENTS}/commitments?view=inbox`));
-      if (r.ok) view = await r.json();
-      else {
-        const e = await r.json().catch(() => null);
-        running = e?.running ?? false;
-        throw new Error(e?.error ?? `aw-secretary answered ${r.status}`);
-      }
-    } catch (e) { error = String(e?.message ?? e); }
-    finally {
-      consultedAt = Date.now();
-      // WRITING を過ぎて次を送った後に届いた答えでは、次の書き込みを待つのをやめない
-      if (id && sentAt === mine) sentAt = 0;
-      else if (!id) reading = false;
-      // 答えが届く順は聞いた順と限らないので、古い view は置かない。collect の最中と知る前に始めた読みの答えでは、running を外さない。collect が始まる前に読んだ view かもしれない
-      const now = secretary(), last = now?.view ?? null;
-      if (!view || newer(view, last) && (knew || view.running || !last?.running)) {
-        // 聞けなかった時と書けなかった時は、前の view を残して error だけを付ける。collect の最中の 503 は running: true が付くので、すぐに key を止める
-        const next = { view: view ?? (running && last ? { ...last, running } : last), error };
-        if (!same(next, now)) setShared("inbox.commitments", next);
-      }
-      cx.notify();
-    }
-  });
-}
-
 // 数分おきに見に行き始める。いつも出ている mod の init から 1 度だけ呼ぶ
 export function start(cx) {
   cx.timer.every(TICK, cx => refresh(cx));
   refresh(cx);
-  if (COMMITMENTS) {
-    cx.timer.every(SECRETARY_BUSY, cx => {
-      if (!reading && (secretary()?.view?.running || Date.now() - consultedAt >= SECRETARY)) consult(cx);
-    });
-    consult(cx);
-  }
   if (!WORK_DIGEST) return;
   cx.timer.every(DIGEST_BUSY, cx => {
     const d = shared("inbox.digest")?.state;
@@ -186,14 +129,12 @@ export function waiting() {
     slack: (shared("inbox.digest")?.state?.slack.items ?? []).filter(i => !i.ticked).sort((a, b) => order(a) - order(b) || b.at - a.at),
     failing: (shared("inbox.github")?.prs ?? []).filter(pr => pr.ci === "fail"),
     reviews: shared("inbox.reviews")?.list ?? [],
-    commitments: secretary()?.view?.items ?? [],
   };
 }
 
-// Slack の FYI と、期限が近いだけ・済んだかもしれないだけの commitment は数えない
+// Slack の FYI は数えない
 export function count(w = waiting()) {
-  return w.blocked.length + w.done.length + w.failing.length + w.reviews.length + w.slack.filter(i => i.kind === "ask").length
-    + w.commitments.filter(c => c.reason === "triage" || c.reason === "overdue").length;
+  return w.blocked.length + w.done.length + w.failing.length + w.reviews.length + w.slack.filter(i => i.kind === "ask").length;
 }
 
 // タブバーに出すボタン。押すとモーダルを開き、もう一度押すと閉じる。見た目は隣の panel のボタンに合わせる
