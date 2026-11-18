@@ -4,7 +4,7 @@
 // commitment だけは、開いた時にここで aw-secretary に聞き、答えもここに持つ。dialog の 2 つ目の面は commitment の一覧 (./commitments.js)
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { panes, focused, run, notify, theme, shared, props, closeOverlay } from "herdr";
+import { panes, focused, run, notify, theme, shared, props, closeOverlay, nextCommand } from "herdr";
 import { waiting, checking, refresh, ask } from "./feed.js";
 import { readAsks, askOf } from "./asks.js";
 import { Secretary, merge } from "./secretary.js";
@@ -17,8 +17,6 @@ const REASONS = { triage: ["triage", "accent"], overdue: ["overdue", "blocked"],
 // commitment の行で状態を決める key。Slack の行では d と s は tick と skip
 const DECIDE = { a: "active", x: "rejected", d: "done", s: "later", w: "waiting" };
 const FACE = { inbox: "Inbox", commitments: "Commitments" };
-// dialog は画面の 8 割まで広がるので、Inbox の面の card は読める幅で止め、真ん中に並べる
-const COLUMN = 960;
 
 // Slack の permalink を、aw-secretary の links の key (slack:<channel>:<thread の root の ts>) にする。返信の permalink は thread_ts の root に寄せる
 const slackKey = url => { const m = /\/archives\/([A-Z0-9]+)\/p(\d+)(\d{6})/.exec(url ?? ""); if (!m) return null; const t = /[?&]thread_ts=(\d+\.\d+)/.exec(url); return `slack:${m[1]}:${t ? t[1] : `${m[2]}.${m[3]}`}`; };
@@ -47,6 +45,8 @@ export default class Inbox extends View {
     this.faces = COMMITMENTS ? ["inbox", "commitments"] : ["inbox"];
     this.face = "inbox";
     this.cm = COMMITMENTS ? new Commitments(this, this.sec) : null;
+    // 開いている dialog の面を、keys.json と herdr-app do から選べる: "inbox.commitments" / "inbox.inbox"
+    cx.spawn(async cx => { for (;;) { const c = await nextCommand(); if (this.faces.includes(c)) { this.show(c, cx); cx.notify(); } } });
     // 開いた時に取り直す。GitHub は前に見てから間が空いている時だけ
     refresh(cx);
     ask(cx);
@@ -273,9 +273,9 @@ export default class Inbox extends View {
           .child(!cm ? "Commitments…" : cm.running ? "collecting…" : cm.lastCollectAt ? `Commitments ${ago(Date.parse(cm.lastCollectAt))}` : "Commitments")))
         .child(top("in-reload", checking() ? "checking…" : github?.at ? `GitHub ${ago(github.at)}` : "GitHub", cx => refresh(cx, true))))
       .child(face === "commitments" ? this.cm.render(t, this.handle) : rows.length
-        ? v_flex().id("in-body").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.scroll).px(14).pb(12).pt(6).gap(6).items_center()
-          .children(rows.map(row => (row.head ? div().pt(6).text_size(11).font_semibold().text_color(t.muted).child(row.head)
-            : row.slack ? this.slack(t, row, row === sel) : this.card(t, row, row === sel)).w_full().max_w(COLUMN)))
+        ? v_flex().id("in-body").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.scroll).px(14).pb(12).pt(6).gap(6)
+          .children(rows.map(row => row.head ? div().pt(6).text_size(11).font_semibold().text_color(t.muted).child(row.head)
+            : row.slack ? this.slack(t, row, row === sel) : this.card(t, row, row === sel)))
         : div().flex_1().p(16).text_color(t.dim).child("Nothing needs you"))
       .when(face === "inbox" && Boolean(digest?.state), el => el.child(this.standup(t, digest.state.standup)))
       .child(div().flex_none().px(14).py(7).border_t(1).border_color(t.border).truncate().text_size(11).text_color(this.note ? t.muted : t.dim)
