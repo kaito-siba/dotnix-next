@@ -81,11 +81,14 @@ runCommand "herdr-app-show"
     install -m644 ${env} $out/mods/show/env.js
 
     # Inbox: 自分の手を待っている物を並べるモーダル。mod が import する module
-    # (feed.js と asks.js と env.js) は link では置けない: app は mod の folder の外へ
-    # 辿り着く import を読まない。なので mod ごと、コピーされるこの木に入れる。
+    # (feed.js と asks.js と secretary.js と commitments.js と env.js) は link では
+    # 置けない: app は mod の folder の外へ辿り着く import を読まない。なので mod
+    # ごと、コピーされるこの木に入れる。
     install -m644 ${./mods/inbox/main.js} $out/mods/inbox/main.js
     install -m644 ${./mods/inbox/feed.js} $out/mods/inbox/feed.js
     install -m644 ${./mods/inbox/asks.js} $out/mods/inbox/asks.js
+    install -m644 ${./mods/inbox/secretary.js} $out/mods/inbox/secretary.js
+    install -m644 ${./mods/inbox/commitments.js} $out/mods/inbox/commitments.js
     install -m644 ${./mods/inbox/mod.json} $out/mods/inbox/mod.json
     install -m644 ${./mods/inbox/inbox.svg} $out/mods/inbox/inbox.svg
     install -m644 ${inboxEnv} $out/mods/inbox/env.js
