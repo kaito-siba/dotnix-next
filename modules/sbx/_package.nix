@@ -6,13 +6,12 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "sbx";
-  # 0.51.0 は 2026-11-03 公開で冷却 7 日を満たしていないが、試用段階なので例外。
   # nixpkgs 未収録のバイナリなので手動 bump (version と hash を書き換える)。
-  version = "0.51.0";
+  version = "0.53.0";
 
   src = fetchurl {
     url = "https://github.com/docker/sbx-releases/releases/download/v${finalAttrs.version}/DockerSandboxes-linux-amd64.tar.gz";
-    hash = "sha256-XWBdlN0penlhiKrUCVpKLyI2jI8nDy2sSfLt5FPU0+w=";
+    hash = "sha256-qOFx7TMeJIX/jUaXjXv550kpdprKy2dZwVoKZlo7e7I=";
   };
 
   sourceRoot = "docker-sbx";
