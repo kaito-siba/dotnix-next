@@ -143,7 +143,21 @@ export class Commitments {
     if (!sent) this.owner.note = WAITING;
   }
 
-  change(cx, c, body) { this.write(cx, `/commitments/${c.id}?view=${this.mode}`, body, () => this.details.delete(c.id)); }
+  change(cx, c, body, then) { this.write(cx, `/commitments/${c.id}?view=${this.mode}`, body, (got, cx) => { this.details.delete(c.id); then?.(got, cx); }); }
+
+  // 状態を変えた行は別の節か別の面へ移るが、選ぶ位置はその場に残す。答えが来たら、押した時の一覧でその次の行を、無ければ前の行を選ぶ。どちらも消えていたら同じ位置の行を選ぶ
+  // 答えを待つ間に別の行を選んだ時と、状態が変わらなかった時は、その行を選んだままにする
+  decide(cx, c, status) {
+    const ids = () => this.rows().filter(r => !r.head).map(r => r.item.id);
+    const list = ids(), at = list.indexOf(c.id), near = [list[at + 1], list[at - 1]];
+    // sel が null で at の位置の行を選んでいる間も、答えが来た時に別の行へ移っていないかを見分けられるよう、押した行の id を持つ
+    this.sel = c.id;
+    this.change(cx, c, { status }, () => {
+      if (this.sel !== c.id || this.view?.items.find(x => x.id === c.id)?.status === c.status) return;
+      const now = ids();
+      this.sel = near.find(id => now.includes(id)) ?? now[Math.min(at, now.length - 1)] ?? null;
+    });
+  }
 
   // 入力欄を開く (使い道と、開いた key と、初めの値)、または閉じる
   type(mode, cx, key = null, value = "") {
@@ -257,7 +271,7 @@ export class Commitments {
     else if (k === "u") this.undo(cx);
     else if (k === "N" && open) this.type("source", cx, "N");
     else if (!c) return false;
-    else if (Object.hasOwn(DECIDE, k)) this.change(cx, c, { status: open && TOGGLE.has(k) && c.status === DECIDE[k] ? "active" : DECIDE[k] });
+    else if (Object.hasOwn(DECIDE, k)) this.decide(cx, c, open && TOGGLE.has(k) && c.status === DECIDE[k] ? "active" : DECIDE[k]);
     else if (k === "t") this.type("due", cx, "t", c.due ?? "");
     else if (k === "n") this.type("memo", cx, "n", this.notes(c) ?? "");
     else if (k === "T") this.type("title", cx, "T", c.title);
