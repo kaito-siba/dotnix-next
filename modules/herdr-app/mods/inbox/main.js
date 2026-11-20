@@ -1,7 +1,7 @@
 // 自分の手を待っている物を 1 か所に並べるモーダル。key で選んで、開く、URL を copy する、session に貼る
 // 許可や返事を待っている agent、見ていない間に終わった agent、Slack の依頼、aw-secretary の commitment (自分への約束) のうち手を付けるべき物、自分の branch の pull request で落ちた CI
 // 中身を取りに行くのは ./feed.js と ./asks.js。開いていない間はタブバーと左バーの Agents の一覧が見に行き、ここは shared に置かれた物を読む
-// Slack と commitment は、開いた時にここで aw-secretary に聞き、答えもここに持つ。dialog の 2 つ目の面は commitment の一覧 (./commitments.js)
+// Slack と commitment は、開いた時にここで aw-secretary に聞き、答えもここに持つ。dialog の 2 つ目と 3 つ目の面は、open な commitment と閉じた commitment の一覧 (./commitments.js)
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { panes, focused, run, notify, theme, shared, props, closeOverlay, nextCommand } from "herdr";
@@ -16,7 +16,7 @@ import { COMMITMENTS } from "./env.js";
 const REASONS = { triage: ["triage", "accent"], overdue: ["overdue", "blocked"], due_soon: ["due soon", "working"], maybe_done: ["done?", "done"] };
 // commitment の行で状態を決める key。Slack の行では d と s は tick と skip (FYI の s は seen)
 const DECIDE = { a: "active", x: "rejected", d: "done", s: "later", w: "waiting" };
-const FACE = { inbox: "Inbox", commitments: "Commitments" };
+const FACE = { inbox: "Inbox", commitments: "Commitments", closed: "Closed" };
 
 function ago(ms) {
   const s = Math.max(0, (Date.now() - ms) / 1000);
@@ -35,16 +35,16 @@ export default class Inbox extends View {
     this.handle.focus();
     // 開いた直後の focus は dialog の表示に奪われる事があるので、もう一度取る
     cx.timer.after(600, () => this.handle.focus());
-    // commitments は GET /commitments?view=inbox の答えで、読めるまで null。inboxStale は Commitments の面で書いた後の印で、この面を出す時に読み直す
+    // commitments は GET /commitments?view=inbox の答えで、読めるまで null。inboxStale は他の面で書いた後の印で、この面を出す時に読み直す
     this.commitments = null; this.commitmentError = null; this.inboxStale = false;
     // slack は GET /slack の答えで、読めるまで null
     this.slack = null; this.slackError = null;
-    // URL の無い machine では Commitments の面を出さない
+    // URL の無い machine では Commitments と Closed の面を出さない。cms は面の名前ごとの Commitments
     this.sec = new Secretary(COMMITMENTS);
-    this.faces = COMMITMENTS ? ["inbox", "commitments"] : ["inbox"];
+    this.faces = COMMITMENTS ? ["inbox", "commitments", "closed"] : ["inbox"];
     this.face = "inbox";
-    this.cm = COMMITMENTS ? new Commitments(this, this.sec) : null;
-    // 開いている dialog の面を、keys.json と herdr-app do から選べる: "inbox.commitments" / "inbox.inbox"
+    this.cms = COMMITMENTS ? { commitments: new Commitments(this, this.sec, "open"), closed: new Commitments(this, this.sec, "closed") } : {};
+    // 開いている dialog の面を、keys.json と herdr-app do から選べる: "inbox.commitments" / "inbox.closed" / "inbox.inbox"
     cx.spawn(async cx => { for (;;) { const c = await nextCommand(); if (this.faces.includes(c)) { this.show(c, cx); cx.notify(); } } });
     // 開いた時に取り直す。GitHub は前に見てから間が空いている時だけ
     refresh(cx);
@@ -54,8 +54,15 @@ export default class Inbox extends View {
   show(face, cx) {
     if (!this.faces.includes(face)) return;
     this.face = face;
-    if (face === "commitments") this.cm.show(cx);
+    if (this.cms[face]) this.cms[face].show(cx);
     else if (this.inboxStale) this.load(cx);
+  }
+
+  // どの面で書いても、他の面の view は古くなる。出している面はすぐに、他はその面を出す時に読み直す。from は書いた面の Commitments で、Inbox の面からは null
+  wrote(cx, from) {
+    if (from) this.inboxStale = true;
+    for (const cm of Object.values(this.cms)) if (cm !== from) cm.stale = true;
+    this.show(this.face, cx);
   }
 
   // head が見出しで、他は選べる行。url は copy と paste に使う物で、agent の行には無い。open は Enter で開く物が url と違う時だけ
@@ -131,21 +138,17 @@ export default class Inbox extends View {
   // commitment の状態を決め、答えの inbox の view で置き換える。collect の最中は aw-secretary が書かせないので、送らない
   decide(cx, row, status) {
     if (this.commitments?.running) { this.note = COLLECTING; return; }
-    const id = row.commitment.id;
-    // Commitments の面の view と、その行の詳細は読み直す。答えを待つ間にその面へ移っていればすぐに、居なければその面を出す時に
-    const sent = this.sec.write(cx, `/commitments/${id}`, { status }, (got, cx) => {
+    const sent = this.sec.write(cx, `/commitments/${row.commitment.id}`, { status }, (got, cx) => {
       if (this.note === WAITING) this.note = null;
       this.commitments = merge(this.commitments, got); this.commitmentError = got.error;
       this.loadSlack(cx);
-      if (!this.cm) return;
-      this.cm.stale = true; this.cm.details.delete(id);
-      if (this.face === "commitments") this.cm.show(cx);
+      this.wrote(cx, null);
     });
     if (!sent) this.note = WAITING;
   }
 
   key(e, cx, list, at) {
-    const m = e.modifiers ?? {}, k = e.key, row = list[at], cm = this.face === "commitments" ? this.cm : null;
+    const m = e.modifiers ?? {}, k = e.key, row = list[at], cm = this.cms[this.face] ?? null;
     if (m.alt || m.platform) return;
     const plain = !m.control && !m.shift;
     // 入力欄と、面の上に重ねた一覧には、その面が先に聞く。入力欄に流す key は止めない
@@ -155,8 +158,8 @@ export default class Inbox extends View {
       if (k === "escape" && cm?.filter) cm.refilter("", cx);
       else if (k === "escape") closeOverlay(props().overlay);
       else if (k === "tab" && !m.control) this.show(this.faces[(this.faces.indexOf(this.face) + 1) % this.faces.length], cx);
-      else if (plain && (k === "1" || k === "2")) this.show(this.faces[Number(k) - 1], cx);
-      // Commitments の面の書く key は、Ctrl 付きでは効かせない。Ctrl は移動だけ
+      else if (plain && /^[1-9]$/.test(k)) this.show(this.faces[Number(k) - 1], cx);
+      // Commitments と Closed の面の書く key は、Ctrl 付きでは効かせない。Ctrl は移動だけ
       else if (cm && m.control) { if (k === "j" || k === "n") cm.move(1, cx); else if (k === "k" || k === "p") cm.move(-1, cx); }
       else if (cm) cm.key(e, cx);
       else if (k === "enter") this.open(cx, row);
@@ -169,7 +172,7 @@ export default class Inbox extends View {
       else if (plain && k === "s") this.settle(cx, row, row?.slack?.kind === "ask" ? "skip" : "seen");
       else if (plain && k === "r") { refresh(cx, true); this.load(cx); }
       // 取り消しは Commitments の面と同じ。この dialog で書いた操作を、面を問わず新しい物から戻す
-      else if (plain && k === "u" && this.cm) this.cm.undo(cx);
+      else if (plain && k === "u" && this.cms.commitments) this.cms.commitments.undo(cx);
     }
     // 他の key も下の端末へは流さない
     cx.stop_propagation();
@@ -231,7 +234,7 @@ export default class Inbox extends View {
     if (row?.url) keys.push("y copy URL", "p paste to session");
     if (row?.slack) keys.push(...(this.slack?.running ? [`d/s ${wait}`] : row.slack.kind === "ask" ? ["d done", "s skip"] : ["s seen"]));
     if (row?.commitment) keys.push(...(this.commitments?.running ? [`a/x/d/s/w ${wait}`] : ["a adopt", "x reject", "d done", "s later", "w waiting"]));
-    return [...keys, "r refresh", ...(this.cm ? ["u undo", "Tab face"] : []), "Esc close"].join(" · ");
+    return [...keys, "r refresh", ...(this.cms.commitments ? ["u undo", "Tab face"] : []), "Esc close"].join(" · ");
   }
 
   render(cx) {
@@ -249,10 +252,10 @@ export default class Inbox extends View {
       const shown = rows.indexOf(sel);
       this.scroll.scroll_to_item(shown === 1 ? 0 : shown);
     }
-    const github = shared("inbox.github"), sl = this.slack, face = this.face;
+    const github = shared("inbox.github"), sl = this.slack, face = this.face, board = this.cms[face];
     // 見出しの commitment の時刻と error は、出している面の view の物
-    const cm = face === "commitments" ? this.cm.view : this.commitments;
-    const error = (face === "commitments" ? this.cm.error : this.commitmentError ?? this.slackError) ?? "";
+    const cm = board ? board.view : this.commitments;
+    const error = (board ? board.error : this.commitmentError ?? this.slackError) ?? "";
     const top = (id, label, action) => div().id(id).flex_none().px(6).h(22).flex().items_center().rounded(5).text_size(11).text_color(t.dim).cursor_pointer()
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => action(cx)).child(label);
     return v_flex().id("inbox").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx, list, at))
@@ -271,12 +274,12 @@ export default class Inbox extends View {
         .when(Boolean(cm) || Boolean(COMMITMENTS) && this.sec.busy, el => el.child(div().flex_none().px(6).text_size(11).text_color(cm?.running ? t.working : t.dim)
           .child(!cm ? "Commitments…" : cm.running ? "collecting…" : cm.lastCollectAt ? `Commitments ${ago(Date.parse(cm.lastCollectAt))}` : "Commitments")))
         .child(top("in-reload", checking() ? "checking…" : github?.at ? `GitHub ${ago(github.at)}` : "GitHub", cx => refresh(cx, true))))
-      .child(face === "commitments" ? this.cm.render(t, this.handle) : rows.length
+      .child(board ? board.render(t, this.handle) : rows.length
         ? v_flex().id("in-body").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.scroll).px(14).pb(12).pt(6).gap(6)
           .children(rows.map(row => row.head ? div().pt(6).text_size(11).font_semibold().text_color(t.muted).child(row.head)
             : row.slack ? this.slackCard(t, row, row === sel) : this.card(t, row, row === sel)))
         : div().flex_1().p(16).text_color(t.dim).child("Nothing needs you"))
       .child(div().flex_none().px(14).py(7).border_t(1).border_color(t.border).truncate().text_size(11).text_color(this.note ? t.muted : t.dim)
-        .child(this.note ?? (face === "commitments" ? this.cm.hint() : this.hint(sel))));
+        .child(this.note ?? (board ? board.hint() : this.hint(sel))));
   }
 }
