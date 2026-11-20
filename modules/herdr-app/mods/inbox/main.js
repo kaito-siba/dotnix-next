@@ -17,6 +17,8 @@ const REASONS = { triage: ["triage", "accent"], overdue: ["overdue", "blocked"],
 // commitment の行で状態を決める key。Slack の行では d と s は tick と skip (FYI の s は seen)
 const DECIDE = { a: "active", x: "rejected", d: "done", s: "later", w: "waiting" };
 const FACE = { inbox: "Inbox", commitments: "Commitments", closed: "Closed" };
+// Esc の action を、on_key_down と同じ key() で扱うための key event
+const ESCAPE = { key: "escape", keystroke: "escape", modifiers: {} };
 
 function ago(ms) {
   const s = Math.max(0, (Date.now() - ms) / 1000);
@@ -46,6 +48,9 @@ export default class Inbox extends View {
     this.cms = COMMITMENTS ? { commitments: new Commitments(this, this.sec, "open"), closed: new Commitments(this, this.sec, "closed") } : {};
     // 開いている dialog の面を、keys.json と herdr-app do から選べる: "inbox.commitments" / "inbox.closed" / "inbox.inbox"
     cx.spawn(async cx => { for (;;) { const c = await nextCommand(); if (this.faces.includes(c)) { this.show(c, cx); cx.notify(); } } });
+    // Esc は app が key context の Overlay で overlay.close に束ねていて、on_key_down に届く前に dialog を閉じる。より深い key context に束ねた action で先に受ける
+    // herdr は keys を読み直すたびに全ての束ねを消すので、開くたびに束ね直す。render の中では束ねられない
+    try { cx.bind_keys([{ keystroke: "escape", action: "inbox_escape", context: "InboxDialog" }]); } catch {}
     // 開いた時に取り直す。GitHub は前に見てから間が空いている時だけ
     refresh(cx);
     this.load(cx);
@@ -156,6 +161,8 @@ export default class Inbox extends View {
     else {
       this.note = null;
       if (k === "escape" && cm?.filter) cm.refilter("", cx);
+      // 入力欄が先に focus を手放した Esc では、typing が外れていても dialog は focus を持っていない。閉じずに focus を取り戻す
+      else if (k === "escape" && !this.handle.is_focused()) this.handle.focus();
       else if (k === "escape") closeOverlay(props().overlay);
       else if (k === "tab" && !m.control) this.show(this.faces[(this.faces.indexOf(this.face) + 1) % this.faces.length], cx);
       else if (plain && /^[1-9]$/.test(k)) this.show(this.faces[Number(k) - 1], cx);
@@ -258,7 +265,8 @@ export default class Inbox extends View {
     const error = (board ? board.error : this.commitmentError ?? this.slackError) ?? "";
     const top = (id, label, action) => div().id(id).flex_none().px(6).h(22).flex().items_center().rounded(5).text_size(11).text_color(t.dim).cursor_pointer()
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => action(cx)).child(label);
-    return v_flex().id("inbox").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx, list, at))
+    return v_flex().id("inbox").key_context("InboxDialog").on_action("inbox_escape", (_e, cx) => this.key(ESCAPE, cx, list, at))
+      .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx, list, at))
       .size_full().min_h(0).rounded(10).overflow_hidden().bg(t.popover).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .child(svg("mods/inbox/inbox.svg").size(14).text_color(t.muted))

@@ -16,6 +16,8 @@ const COPIES = "sandbox/preview";
 const METRICS = `head -1 /proc/stat; sleep 0.5; head -1 /proc/stat; nproc; cat /proc/loadavg
 grep -E '^(MemTotal|MemAvailable):' /proc/meminfo; df -kP / | tail -1
 echo ---; ps -eo pcpu,rss,pid,args --sort=-pcpu 2>/dev/null | head -9`;
+// Esc の action を、on_key_down と同じ key() で扱うための key event
+const ESCAPE = { key: "escape", keystroke: "escape", modifiers: {} };
 // host へコピーして、置いた folder を返す。host が他の machine の事もあるので、home はその machine に聞く
 const SAVE = `d="$HOME/Downloads/sbx/$1"; mkdir -p "$d" && sbx cp "$1:$2" "$d/" >&2 && printf %s "$d"`;
 
@@ -62,6 +64,9 @@ export default class Sandbox extends View {
     cx.timer.every(POLL, cx => this.refresh(cx));
     // keys.json から面を直に開ける: "sandbox.network" 等
     cx.spawn(async cx => { for (;;) { const c = await nextCommand(); if (TABS.includes(c)) this.show(c, cx); } });
+    // Esc は app が key context の Overlay で overlay.close に束ねていて、on_key_down に届く前に dialog を閉じる。より深い key context に束ねた action で先に受ける
+    // herdr は keys を読み直すたびに全ての束ねを消すので、開くたびに束ね直す。render の中では束ねられない
+    try { cx.bind_keys([{ keystroke: "escape", action: "sandbox_escape", context: "SandboxDialog" }]); } catch {}
     cx.spawn(async cx => { await Browser.sweep(COPIES); this.refresh(cx); });
   }
 
@@ -352,6 +357,8 @@ export default class Sandbox extends View {
     }
     const row = tab === "ports" || tab === "network" ? this.selected() : null;
     if (k === "escape" && this.filter[tab]) this.filter[tab] = "";
+    // 入力欄を mouse で押した後や、入力欄が先に focus を手放した後の Esc では、dialog が focus を持っていない。閉じずに focus を取り戻す
+    else if (k === "escape" && !this.handle.is_focused()) this.handle.focus();
     else if (k === "escape" || k === "q") closeOverlay(props().overlay);
     else if (k >= "1" && k <= "4" && !shift) this.show(TABS[Number(k) - 1], cx);
     else if (k === "tab") this.show(TABS[(TABS.indexOf(tab) + (shift ? TABS.length - 1 : 1)) % TABS.length], cx);
@@ -503,7 +510,8 @@ export default class Sandbox extends View {
       : this.tab === "files" ? this.browser.render(t) : this.tab === "ports" ? this.portsView(t) : this.tab === "network" ? this.network(t) : this.metricsView(t);
     const waiting = this.netRows().filter(r => r.state === "pending").length;
     // dialog の枠は角丸だが、中身は角丸に切り抜かれない。背景も同じ丸みにして、角からはみ出させない
-    return v_flex().id("sandbox").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
+    return v_flex().id("sandbox").key_context("SandboxDialog").on_action("sandbox_escape", (_e, cx) => this.key(ESCAPE, cx))
+      .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
       .size_full().min_h(0).rounded(10).bg(t.popover).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(10).items_center().border_b(1).border_color(t.border)
         .child(div().flex_none().font_semibold().child("Sandbox"))
