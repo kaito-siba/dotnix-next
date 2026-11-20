@@ -14,8 +14,9 @@ const SECTIONS = {
 const STATUS = { candidate: "Candidate", active: "Active", waiting: "Waiting", later: "Later", done: "Done", rejected: "Rejected", expired: "Expired" };
 const DOT = { candidate: "accent", active: "done", done: "done", expired: "working" };
 const REASON = { triage: "triage", overdue: "overdue", due_soon: "due soon", maybe_done: "done?" };
+const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // 入力欄の使い道ごとの見出し
-const PROMPT = { due: "Due YYYY-MM-DD · empty clears it", memo: "Memo", title: "Title", source: "Add a source by its Slack or GitHub URL", correct: "Correction for the extract", filter: "Filter by title" };
+const PROMPT = { due: "Due · YYYY-MM-DD, M/D, today, tomorrow or ±N days · empty clears it", memo: "Memo", title: "Title", source: "Add a source by its Slack or GitHub URL", correct: "Correction for the extract", filter: "Filter by title" };
 const DECIDE = { a: "active", x: "rejected", w: "waiting", l: "later", d: "done" };
 // open の面の w と l は、その状態と進行中を行き来する
 const TOGGLE = new Set(["w", "l"]);
@@ -26,6 +27,30 @@ export const COLLECTING = "aw-secretary is collecting. Press r after it finishes
 
 // 2026-11-17T18:02:00+09:00 を 11/17 18:02 にする
 const stamp = at => `${at.slice(5, 10).replace("-", "/")} ${at.slice(11, 16)}`;
+// Date を 2026-11-22 にする。toISOString は UTC の日付になるので使わない
+const iso = day => `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+
+// 期限の入力を、その日の Date にする。空は期限を消す印の null、読めない時は undefined
+// 読む形は today、tomorrow、N 日後の N か +N、N 日前の -N、今年のその日の M/D か M-D、YYYY-MM-DD と YYYY/M/D。2/30 のような無い日は読めない
+// 日数は 4 桁まで。20261122 のような区切りの無い日付を、日数と読まない
+function dueDay(text) {
+  const v = text.trim().toLowerCase(), now = new Date();
+  if (!v) return null;
+  const days = v === "today" ? 0 : v === "tomorrow" ? 1 : /^[+-]?\d{1,4}$/.test(v) ? Number(v) : null;
+  if (days !== null) return new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
+  const md = v.match(/^(\d{1,2})[/-](\d{1,2})$/), ymd = v.match(/^(\d{4})([/-])(\d{1,2})\2(\d{1,2})$/);
+  const [y, m, d] = ymd ? [ymd[1], ymd[3], ymd[4]].map(Number) : md ? [now.getFullYear(), Number(md[1]), Number(md[2])] : [];
+  if (y === undefined) return undefined;
+  const day = new Date(y, m - 1, d);
+  return day.getFullYear() === y && day.getMonth() === m - 1 && day.getDate() === d ? day : undefined;
+}
+
+// 打っている期限の読み。Due → 2026-11-22 (Sun) のように下端に出す
+function dueHint(text) {
+  const day = dueDay(text);
+  return day === null ? "Empty clears the due" : day ? `Due → ${iso(day)} (${DAY[day.getDay()]})` : "Not a date yet";
+}
+
 // 発生源の種類ごとの件数。G2 S1 のように出す (TUI の source_badge と同じ)
 function badge(sources) {
   const n = { github: 0, slack: 0 };
@@ -45,7 +70,8 @@ export class Commitments {
     // sel は選んでいる commitment の id。選んでいた行が消えた後は、at の位置の行を選ぶ
     this.sel = null; this.at = 0; this.filter = "";
     // typing は入力欄の使い道 (PROMPT の key)。null は入力していない。target は入力欄を開いた時に選んでいた commitment の id で、決めた値はそこへ書く
-    this.typing = null; this.opening = null; this.target = null;
+    // typed は入力欄の字の写しで、下端に期限の読みを出すのに使う
+    this.typing = null; this.opening = null; this.target = null; this.typed = "";
     // 面の上に重ねる一覧: 開く発生源を選ぶ (choose) か、前回の朝レポートからの差分 (diff)
     this.overlay = null; this.unsure = false;
     this.scroll = VirtualListScrollHandle.new();
@@ -55,7 +81,10 @@ export class Commitments {
       const o = this.opening, v = this.input.value();
       this.opening = null;
       if (o && (v === o.value + o.key || v === o.key + o.value)) { this.input.set_value(o.value); return; }
+      this.typed = v;
       if (this.typing === "filter") this.refilter(v, cx);
+      // 読めなかった期限の訳は、打ち直したら消して読みに戻す
+      else if (this.typing === "due") { this.owner.note = null; cx.notify(); }
     });
     this.input.on("submit", (_e, cx) => this.submit(cx));
     this.input.on("blur", (_e, cx) => { if (this.typing) { this.typing = null; cx.notify(); } });
@@ -166,7 +195,7 @@ export class Commitments {
     if (mode) {
       this.opening = key && { key, value };
       this.target = this.selected()?.item.id ?? null;
-      this.input.set_value(value);
+      this.input.set_value(value); this.typed = value;
       this.input.focus();
     } else if (was) this.owner.handle.focus();
     cx.notify();
@@ -174,12 +203,14 @@ export class Commitments {
 
   submit(cx) {
     const mode = this.typing, v = this.input.value().trim(), c = this.view?.items.find(c => c.id === this.target);
+    const day = mode === "due" ? dueDay(v) : null;
+    if (day === undefined) { this.owner.note = `Can't read "${v}" as a date. Type YYYY-MM-DD, M/D, today, tomorrow or ±N days`; cx.notify(); return; }
     this.type(null, cx);
     if (mode === "source" && v) this.write(cx, `/sources?view=${this.mode}`, { url: v }, got => this.registered(got));
     else if (mode === "filter") return;
     // 入力している間に読み直して、その commitment がこの面の view から外れた
     else if (!c) this.owner.note = `The commitment was ${this.mode === "open" ? "closed" : "reopened"} while you were typing. Nothing was saved`;
-    else if (mode === "due") this.change(cx, c, { due: v || null });
+    else if (mode === "due") this.change(cx, c, { due: day && iso(day) });
     else if (mode === "memo") this.change(cx, c, { notes: v || null });
     else if (mode === "title" && v) this.change(cx, c, { title: v });
     else if (mode === "correct" && v) this.write(cx, `/commitments/${c.id}/corrections?view=${this.mode}`, { text: v }, got => {
@@ -285,6 +316,7 @@ export class Commitments {
   hint() {
     const o = this.overlay, c = this.selected()?.item, open = this.mode === "open";
     if (this.typing === "filter") return "type to filter · ↑/↓ move · Enter keep · Esc clear";
+    if (this.typing === "due") return `${dueHint(this.typed)} · Enter save · Esc cancel`;
     if (this.typing) return `${PROMPT[this.typing]} · Enter save · Esc cancel`;
     if (o?.kind === "choose") return "1-9 or j/k + Enter open · Esc cancel";
     if (o?.kind === "diff") return "j/k scroll · Esc back";
