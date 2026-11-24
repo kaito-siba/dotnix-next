@@ -1,0 +1,114 @@
+{
+  "fievel": {
+    "lastModified": 1794789490,
+    "observed": "2026-11-21T06:35:40Z",
+    "original": {
+      "owner": "MontyTheSoftwareEngineer",
+      "repo": "fievel",
+      "type": "github"
+    },
+    "rev": "09989b4a4e0ecddcf0559bb753f37d391d0c1ac7",
+    "url": "github:MontyTheSoftwareEngineer/fievel/09989b4a4e0ecddcf0559bb753f37d391d0c1ac7"
+  },
+  "flake-parts": {
+    "lastModified": 1793576659,
+    "observed": "2026-11-21T06:35:40Z",
+    "original": {
+      "owner": "hercules-ci",
+      "repo": "flake-parts",
+      "type": "github"
+    },
+    "rev": "ea2630b7470978622c7689a1ff75d2b389175399",
+    "url": "github:hercules-ci/flake-parts/ea2630b7470978622c7689a1ff75d2b389175399"
+  },
+  "herdr": {
+    "lastModified": 1795126513,
+    "observed": "2026-11-21T06:35:40Z",
+    "original": {
+      "owner": "ogulcancelik",
+      "repo": "herdr",
+      "type": "github"
+    },
+    "rev": "e8d7d9705a7a2c89cef4dd42079379f05685af87",
+    "url": "github:ogulcancelik/herdr/e8d7d9705a7a2c89cef4dd42079379f05685af87"
+  },
+  "home-manager": {
+    "lastModified": 1794943722,
+    "observed": "2026-11-21T06:35:40Z",
+    "original": {
+      "owner": "nix-community",
+      "ref": "release-26.05",
+      "repo": "home-manager",
+      "type": "github"
+    },
+    "rev": "5643e73425b85ac359ba2aaf83deae8ce1cd7968",
+    "url": "github:nix-community/home-manager/5643e73425b85ac359ba2aaf83deae8ce1cd7968"
+  },
+  "nixpkgs-unstable": {
+    "lastModified": 1795085501,
+    "observed": "2026-11-21T06:35:40Z",
+    "original": {
+      "owner": "NixOS",
+      "ref": "nixos-unstable",
+      "repo": "nixpkgs",
+      "type": "github"
+    },
+    "rev": "0bb8272318b4ca41bf0edc6224df3e3e3046b70d",
+    "url": "github:NixOS/nixpkgs/0bb8272318b4ca41bf0edc6224df3e3e3046b70d"
+  },
+  "noctalia": {
+    "lastModified": 1795221190,
+    "observed": "2026-11-21T06:35:40Z",
+    "original": {
+      "owner": "noctalia-dev",
+      "repo": "noctalia",
+      "type": "github"
+    },
+    "rev": "2951c1ab2f5fa3b7069f0d83c50273334f78ffa7",
+    "url": "github:noctalia-dev/noctalia/2951c1ab2f5fa3b7069f0d83c50273334f78ffa7"
+  },
+  "sops-nix": {
+    "lastModified": 1794866654,
+    "observed": "2026-11-21T06:35:40Z",
+    "original": {
+      "owner": "Mic92",
+      "repo": "sops-nix",
+      "type": "github"
+    },
+    "rev": "7c637afdccdf9bcf35c4a2d67b58a77c1fd843a4",
+    "url": "github:Mic92/sops-nix/7c637afdccdf9bcf35c4a2d67b58a77c1fd843a4"
+  },
+  "trcc-linux": {
+    "lastModified": 1794616363,
+    "observed": "2026-11-21T06:35:40Z",
+    "original": {
+      "owner": "Lexonight1",
+      "repo": "thermalright-trcc-linux",
+      "type": "github"
+    },
+    "rev": "41a79a734c5993cb0a790a245a84fad00176625b",
+    "url": "github:Lexonight1/thermalright-trcc-linux/41a79a734c5993cb0a790a245a84fad00176625b"
+  },
+  "xremap": {
+    "lastModified": 1794244210,
+    "observed": "2026-11-21T06:35:40Z",
+    "original": {
+      "owner": "xremap",
+      "repo": "nix-flake",
+      "type": "github"
+    },
+    "rev": "0c48328034c0a6527a0e385555629b65c7db7a8b",
+    "url": "github:xremap/nix-flake/0c48328034c0a6527a0e385555629b65c7db7a8b"
+  },
+  "zen-browser": {
+    "lastModified": 1795154381,
+    "observed": "2026-11-21T06:35:40Z",
+    "original": {
+      "owner": "0xc000022070",
+      "repo": "zen-browser-flake",
+      "type": "github"
+    },
+    "rev": "1ac6ed0bb28e7e098fa27cf9624b33d74bd4b3bd",
+    "url": "github:0xc000022070/zen-browser-flake/1ac6ed0bb28e7e098fa27cf9624b33d74bd4b3bd"
+  }
+}
