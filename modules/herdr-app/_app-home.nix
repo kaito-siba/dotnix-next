@@ -10,14 +10,18 @@
   # inbox (./mods/inbox) が Slack の依頼と commitment (自分への約束) を読み書き
   # する、aw-secretary の API の URL。無ければ null。
   commitmentsUrl ? null,
+  # 下端の bar (./mods/limit-status) が読む、Claude Code の利用上限の file の list と、
+  # Codex の利用上限を訊く herdr-usage-codex の path。
+  claudeUsage ? [ ],
+  codexUsage ? null,
 }:
 let
   # app 同梱の layout と mod は起動のたびに上書きされ、手を入れられない
   # (defaults/AGENTS.md)。手を入れた写しを自分の名前で持つ: main layout の写しが
-  # lycoreco、tabs と workspace-chrome と pane の写しが panel-tabs と bare-chrome と
-  # titled-pane。agents は継承して cheki-agents にする (下の組み立て)。写しを
-  # repo に置くと bump のたびに写し直しになるので、同じ tag の原本を取ってきて
-  # 差分だけ当てる。原本が変わって差分が当たらなくなったら build が落ちる。
+  # lycoreco、tabs と workspace-chrome と pane と workspace-status の写しが panel-tabs と
+  # bare-chrome と titled-pane と limit-status。agents は継承して cheki-agents にする
+  # (下の組み立て)。写しを repo に置くと bump のたびに写し直しになるので、同じ tag の
+  # 原本を取ってきて差分だけ当てる。原本が変わって差分が当たらなくなったら build が落ちる。
   # hash は bump のたびに書き換える。
   upstream =
     path: hash:
@@ -31,6 +35,7 @@ let
   chromeMod = upstream "mods/workspace-chrome/main.js" "sha256-pNHLMATo+d1KSmnYHMl1cIBxFLlfe9hRZhlXRkUtJtc=";
   paneMod = upstream "mods/pane/main.js" "sha256-m7kCjfBCga2IYWXsDrn8CorG763zmrxNaqCv0TcIecc=";
   agentsMod = upstream "mods/agents/main.js" "sha256-PvcUu/GH+BxPu5GUn0+iuS8NztosUsm8Aeq+xfPX4MQ=";
+  statusMod = upstream "mods/workspace-status/main.js" "sha256-vcThtGhlDBs7we4IH8eLqzHO+6+WkzqSAPquxYs8D1k=";
 
   # 左バーの Agents の一覧 (./mods/cheki-agents) の丸い字、M PLUS Rounded 1c。
   # 2026-11-12 の版 (v1.060) は冷ます日数に満たないので、その前の commit に留める。
@@ -57,6 +62,10 @@ let
   inboxEnv = writeText "herdr-inbox-env.js" ''
     export const COMMITMENTS = ${builtins.toJSON commitmentsUrl};
   '';
+  limitsEnv = writeText "herdr-limits-env.js" ''
+    export const CLAUDE = ${builtins.toJSON claudeUsage};
+    export const CODEX = ${builtins.toJSON codexUsage};
+  '';
 in
 # ~/.config/herdr-app にそのまま重ねる木。
 runCommand "herdr-app-home"
@@ -67,7 +76,7 @@ runCommand "herdr-app-home"
     ];
   }
   ''
-    mkdir -p $out/layouts $out/mods/inbox $out/mods/explorer $out/mods/sandbox $out/mods/panel-tabs $out/mods/cheki-agents $out/mods/bare-chrome $out/mods/titled-pane
+    mkdir -p $out/layouts $out/mods/inbox $out/mods/explorer $out/mods/sandbox $out/mods/panel-tabs $out/mods/cheki-agents $out/mods/bare-chrome $out/mods/titled-pane $out/mods/limit-status
 
     # Inbox: 自分の手を待っている物を並べるモーダル。mod が import する module
     # (feed.js と asks.js と secretary.js と commitments.js と env.js) は link では
@@ -99,7 +108,7 @@ runCommand "herdr-app-home"
     done
 
     # layout: 右パネルの stack を tasks だけにし (files は explorer で見る)、タブバーと Agents の一覧と sidebar
-    # の頭と pane の header を写しに差し替える。sidebar の足 (Settings と Add machine) は外す:
+    # の頭と pane の header と下端の bar を写しに差し替える。sidebar の足 (Settings と Add machine) は外す:
     # どちらも key と palette から開ける。sidebar の spaces の一覧も外す: space は
     # navigator (./mods/navigator) で移る。
     jq '
@@ -107,6 +116,7 @@ runCommand "herdr-app-home"
       | (.. | objects | select(.id? == "agents") | .content.mod) = "cheki-agents"
       | (.. | objects | select(.id? == "brand") | .content.mod) = "bare-chrome"
       | (.. | objects | select(.id? == "main") | .content.pane.header.content.mod) = "titled-pane"
+      | (.. | objects | select(.id? == "status") | .content.mod) = "limit-status"
       | (.. | objects | select(.id? == "sidebar") | .children) |= map(select(.id != "sidebar-footer"))
       | (.. | objects | select(.id? == "sidebar-lists") | .children) |= map(select(.id != "spaces"))
       | (.. | objects | select(.id? == "panel-body"))
@@ -117,6 +127,7 @@ runCommand "herdr-app-home"
       and [.. | objects | select(.id? == "agents") | .content.mod] == ["cheki-agents"]
       and [.. | objects | select(.id? == "brand") | .content.mod] == ["bare-chrome"]
       and [.. | objects | select(.id? == "main") | .content.pane.header.content.mod] == ["titled-pane"]
+      and [.. | objects | select(.id? == "status") | .content.mod] == ["limit-status"]
       and ([.. | objects | select(.id? == "sidebar-footer")] | length == 0)
       and [.. | objects | select(.id? == "sidebar-lists") | .children[].id] == ["agents"]
       and [.. | objects | select(.id? == "panel-body") | .children[].id] == ["tasks"]
@@ -142,6 +153,29 @@ runCommand "herdr-app-home"
         'const name = ((p.program?.agent' \
         'const name = (p.program?.agent && (p.title ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").trim()) || ((p.program?.agent'
     echo '{ "place": "none", "title": "Pane header" }' > $out/mods/titled-pane/mod.json
+
+    # 下端の bar: Claude Code と Codex の利用上限の bar (./mods/limit-status/limits.js) を、
+    # palette の案内の前に足す。左に並ぶ字を渡し、収まるかを見積もらせる。init を足すので、
+    # 原本も init を持ったら build を落とす: class に同じ名前の method が 2 つあると、後の
+    # 方だけが黙って使われる。
+    if grep -q '^  init(' ${statusMod}; then
+      echo "workspace-status mod の原本に init がある: ./mods/limit-status を合わせる" >&2
+      exit 1
+    fi
+    { echo 'import { Limits } from "./limits.js";'; cat ${statusMod}; } > $out/mods/limit-status/main.js
+    substituteInPlace $out/mods/limit-status/main.js \
+      --replace-fail \
+        'export default class WorkspaceStatus extends View {' \
+        'export default class WorkspaceStatus extends View { init(_props, cx) { this.limits = new Limits(cx); }' \
+      --replace-fail \
+        'return h_flex().size_full()' \
+        'return h_flex().id("limit-status").on_size_change((size, cx) => this.limits.resize(size, cx)).size_full()' \
+      --replace-fail \
+        '.child(div().flex_1())' \
+        '.child(div().flex_1()).children(this.limits.view(t, [space?.machine ?? "This computer", space?.branch ?? "", list.length + " agents", needs > 0 ? "· " + needs + " needs you" : "", this.hint(t)]))'
+    install -m644 ${./mods/limit-status/limits.js} $out/mods/limit-status/limits.js
+    install -m644 ${limitsEnv} $out/mods/limit-status/env.js
+    echo '{ "place": "none", "title": "Status bar" }' > $out/mods/limit-status/mod.json
 
     # Agents の一覧 (./mods/cheki-agents): 同梱の agents mod を継承して、広い時の
     # 見た目だけを描き直す。原本は手を入れずに upstream.js として置き、継承する

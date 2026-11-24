@@ -18,6 +18,13 @@ in
       cfg = config.herdr-app;
       herdr-core = pkgs.callPackage ./_core.nix { };
       herdr-app = pkgs.callPackage ./_package.nix { inherit herdr-core; };
+      # 下端の bar に出す利用上限を取ってくる物 (./_usage.nix) と、Claude Code が書く file。
+      # file は host の分と、sbx の sandbox の中の分がある。
+      # sandbox の ~/.claude/projects には、~/.sbxenv.yaml の additionalWorkspaces で
+      # host の ~/.local/state/sbx-claude/projects を mount している。
+      hostUsageFile = "${config.xdg.stateHome}/herdr-usage/claude.json";
+      sandboxUsageFile = "${config.home.homeDirectory}/.local/state/sbx-claude/projects/.herdr-usage/claude.json";
+      usage = pkgs.callPackage ./_usage.nix { claudeFile = hostUsageFile; };
 
       # app home に重ねる layout (lycoreco) と mod の木。組み立ては ./_app-home.nix。
       # Agents の一覧の下のチェキには絵を入れられる: 画像は repo に入れず、
@@ -25,6 +32,11 @@ in
       appHome = pkgs.callPackage ./_app-home.nix {
         appVersion = herdr-app.version;
         commitmentsUrl = cfg.commitmentsUrl;
+        claudeUsage = [
+          hostUsageFile
+          sandboxUsageFile
+        ];
+        codexUsage = lib.getExe usage.codex;
       };
 
       # settings.json のうち nix で決める項目。theme は ./themes の名前で、
@@ -128,6 +140,7 @@ in
         home.packages = [
           herdr-core
           herdr-app
+          usage.statusline
         ];
 
         # mod と layout は symlink では置けない: app は mod の asset を app home
