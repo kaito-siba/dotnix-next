@@ -1,8 +1,9 @@
 # Saturday 09:00 JST: bump flake inputs and open PRs with a closure diff.
 #
 # Two PRs, not one. nixpkgs (stable) is reviewed upstream and merges by itself
-# once every host still evaluates; the other inputs wait for a human and for
-# the cooling period (pr-check.yml). See security/README.md.
+# once every host still evaluates; the other inputs move to what was their
+# HEAD a cooling period ago (security/scripts/candidates.py) and wait for a
+# human. See security/README.md.
 name: weekly-update
 
 on:
@@ -153,28 +154,44 @@ jobs:
         run: |
           cp flake.lock /tmp/before.lock
           python3 security/scripts/closure.py /tmp/before.json
-      - name: update every input except nixpkgs
+      - name: lock the cooled candidates, record every HEAD as a candidate
         id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           inputs=$(python3 -c 'import json; l=json.load(open("flake.lock")); print(" ".join(n for n,v in l["nodes"][l["root"]]["inputs"].items() if n != "nixpkgs" and not isinstance(v, list)))')
-          nix flake update $inputs
-          if git diff --quiet flake.lock; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+          nix flake update $inputs --output-lock-file /tmp/head.lock
+          python3 security/scripts/candidates.py flake.lock /tmp/head.lock security/candidates.json /tmp/overrides.txt > /tmp/candidates.md
+          args=()
+          while read -r name url; do args+=(--override-input "$name" "$url"); done < /tmp/overrides.txt
+          if [ ${#args[@]} -gt 0 ]; then nix flake lock "${args[@]}"; fi
+          if git diff --quiet flake.lock security/candidates.json; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
       - name: closure after (every host must still evaluate)
         if: steps.update.outputs.changed == 'true'
         run: python3 security/scripts/closure.py /tmp/after.json
       - name: report
         if: steps.update.outputs.changed == 'true'
         run: |
-          python3 security/scripts/report.py /tmp/before.lock flake.lock /tmp/before.json /tmp/after.json > /tmp/report-full.md
           {
-            echo "nixpkgs 以外の input を更新。冷却期間 (7 日) を満たすまで pr-check が落ちる。"
-            echo "緊急時は \`security-fastlane\` ラベルでチェックを飛ばす。完全なレポートは workflow の artifact。"
+            echo "## candidates"
+            echo
+            cat /tmp/candidates.md
+            echo
+            python3 security/scripts/report.py /tmp/before.lock flake.lock /tmp/before.json /tmp/after.json
+          } > /tmp/report-full.md
+          {
+            echo "nixpkgs 以外の input を、冷却期間 (7 日) より前に HEAD だった rev に更新し、今の HEAD を次の候補として \`security/candidates.json\` に記録する。"
+            echo "完全なレポートは workflow の artifact。"
+            echo
+            echo "## candidates"
+            echo
+            cat /tmp/candidates.md
             echo
             echo "## cooling"
             echo
             python3 security/scripts/cooling.py flake.lock /tmp/before.lock || true
             echo
-            python3 security/scripts/report.py /tmp/before.lock flake.lock /tmp/before.json /tmp/after.json --max-bytes 60000
+            python3 security/scripts/report.py /tmp/before.lock flake.lock /tmp/before.json /tmp/after.json --max-bytes 56000
           } > /tmp/body.md
           cat /tmp/report-full.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

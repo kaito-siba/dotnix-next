@@ -7,7 +7,7 @@
 | 層 | 対象 | 更新 |
 |---|---|---|
 | stable | nixpkgs (nixos-26.05)。ほぼ全部 | 週 1 の CI PR、自動 merge |
-| 例外 | nixpkgs-unstable から取るもの。`grep -rl pkgs-unstable modules` と、flake.nix で `follows = "nixpkgs-unstable"` の input | 週 1 の CI PR、冷却 7 日 |
+| 例外 | nixpkgs-unstable から取るもの。`grep -rl pkgs-unstable modules` と、flake.nix で `follows = "nixpkgs-unstable"` の input | 週 1 の CI PR。7 日前に HEAD だった rev を lock する。仕組みは「input の冷却」 |
 | 直接 input | nixpkgs 以外の flake input。`inputs.nixpkgs.follows` は stable | 同上 |
 | バイナリ pin | flake.nix の URL に commit を書いた input と、modules 内で fetchurl の hash を固定しているもの | 手で上げる |
 
@@ -15,15 +15,31 @@
 
 | workflow | いつ | 何をするか |
 |---|---|---|
-| `weekly-update` | 土曜 09:00 JST | `nix flake update`。nixpkgs だけの PR は pr-check が通れば自動 merge (`--auto`)。それ以外の input の PR は人間が読んで merge |
-| `pr-check` | PR ごと | 全ホストが評価できること。flake.lock が動いた PR は変更された input が冷却期間 (7 日) を満たすこと |
+| `weekly-update` | 土曜 09:00 JST | nixpkgs は `nix flake update` して、pr-check が通れば自動 merge (`--auto`)。それ以外の input は冷却の済んだ候補を lock し、今の HEAD を次の候補に記録する PR を作る。こちらは人間が読んで merge |
+| `pr-check` | PR ごと | 全ホストが評価できること。flake.lock が動いた PR は変更された input が冷却期間 (7 日) を満たすこと。weekly-update の PR は冷却の済んだ rev しか入れないので、落ちるのは手で lock を動かした PR |
 | `daily-security` | 毎日 09:30 JST | vulnix (NVD) + OSV + GitHub advisories。結果は Actions の summary と artifact |
+
+## input の冷却
+
+`nix flake update` は HEAD を lock するので、毎週 commit のある input はいつ更新しても 7 日に届かない。そこで weekly-update は HEAD をすぐには入れず、見た時刻と一緒に `candidates.json` に候補として記録し、翌週以降に lock する。`security/scripts/candidates.py` が input ごとに次のように扱う。
+
+- 候補を lock するのは、次の 3 つを全部満たしたとき。
+  - 見た時刻から `cooling_days` − 1 日が経っている。1 日引くのは、cron の起動時刻が週ごとに数分ずれても 1 週見送りにならないようにするため
+  - commit 日時から `cooling_days` が経っている。pr-check の冷却チェックと同じ基準
+  - 今の branch の HEAD の祖先である。upstream が force-push で消した commit は lock しない
+- 期限前の候補は、新しい HEAD で上書きしない。上書きすると冷却の起点が後ろへずれる。
+- flake.nix の URL が変わった input と、force-push で branch から消えた候補は、候補を捨てて今の HEAD を記録し直す。
+- 推移依存は、lock した rev の flake.lock から決まるので記録しない。
+- github 型以外の input は候補にせず、PR 本文で手作業の更新を促す。
+
+`candidates.json` は inputs PR に同梱されるので、来週以降に入る rev は PR の差分で読める。master に merge されるまで候補は進まない。merge しなかった週は master の候補が残り、翌週の run がその候補をもう一度 lock する。
 
 ホストの評価はビルドなし。`nix derivation show -r` で derivation を列挙するだけなので darwin ホストも Linux runner で評価でき、import-from-derivation は禁止してある (`nix develop .#security` だけは vulnix と cvss の devShell を実体化する)。
 
 ## 日々の運用
 
-- **weekly-update の inputs PR**: 本文の lock 差分 (推移依存も含む) と closure 差分を読む。本文は 60 KB で打ち切られるので、長いときは artifact の完全版を見る。冷却チェックが落ちていたら、日付が過ぎるのを待って `pr-check` を再実行するか、CVE 対応なら `security-fastlane` ラベルを付ける (ラベルの付け外しで pr-check が走り直す)。
+- **weekly-update の inputs PR**: 本文の candidates の表で、今回 lock する rev と来週以降の候補を見る。表の compare link は、merge 後も lock に入らない新しい commit を指す。冷却中に upstream が revert した commit が無いかは、ここで読む。そのうえで lock 差分 (推移依存も含む) と closure 差分を読む。本文は 56 KB で打ち切られるので、長いときは artifact の完全版を見る。
+- **CVE 対応などで HEAD を今すぐ入れたいとき**: 手で `nix flake update <input>` した PR に `security-fastlane` ラベルを付けて冷却チェックを飛ばす。ラベルの付け外しで pr-check が走り直す。
 - **daily-security**: 最初の 1 か月は report-only。summary に「New findings」が出たら triage して、
   - 誤検知で恒久的なもの → `vulnix-whitelist.toml`
   - 本物だが今は対応しないもの → `baseline.json` の `keys` に ID 単位で追加 (`vulnix:openssl:3.6.3:CVE-…` の形。version が変わると再浮上する)
@@ -53,7 +69,8 @@ NVD のフィードは `modified` / `recent` が 2 時間ごと、年次が 1 �
 
 ## 限界
 
-- 冷却期間は lock の `lastModified` (upstream の commit 時刻) を見るだけで、公開からの経過を証明するものではない。公開直後の汚染版を拾わないための遅延であって、lock を書き換えられる相手には効かない。
+- weekly-update の冷却は、この repository が branch 上で HEAD を見た時刻から数える。commit 時刻を古く偽った commit も 6 日は待たされる。手で lock を動かした PR の pr-check は lock の `lastModified` しか見ない。これは upstream が付けた commit 時刻なので、公開からの経過を証明しない。どちらも公開直後の汚染版を拾わないための遅延であって、lock や `candidates.json` を書き換えられる相手には効かない。
+- 冷却は経過時間しか見ない。悪い commit が冷却中に upstream で revert されても、force-push で消されない限り 7 日後に lock される。PR 本文の compare link を人間が読んで気付くしかない。
 - vulnix は名前と version の CPE 照合なので誤検知が多い。whitelist と baseline で吸収する前提。直近 5 年分の NVD しか読まないので、それより古い CVE は見ない。
 - GitHub advisories は「存在する」ことしか見ない。affected range の判定は人間。
 - severity は出所つきで出す (nvd / cvss3 / cvss4 / label / none)。label は CVSS ベクトルが無いときの代表値で、PYSEC 単独のレコードなどは none になる。
