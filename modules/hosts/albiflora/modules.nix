@@ -14,6 +14,7 @@ in
         tailscale
         noctalia
         sbx
+        bitwarden
 
         # Desktop session
         desktop
@@ -39,6 +40,7 @@ in
             hm.base
             hm.shell
             hm.cli-tools
+            hm.bitwarden
             hm.neovim
             hm.obsidian
             hm.claude-code
