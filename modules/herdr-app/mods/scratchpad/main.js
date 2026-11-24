@@ -16,6 +16,8 @@ const PICTURE = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
 const COPIES = "scratchpad/preview";
 // app の asset loader の上限 (16 MiB)
 const MAX_PICTURE = 16 * 1024 * 1024;
+// Esc の action を、on_key_down と同じ key() で扱うための key event
+const ESCAPE = { key: "escape", keystroke: "escape", modifiers: {} };
 
 // Claude Code は起動した folder の名前で scratchpad を作るので、pane が下の階層に居ても見つかるよう親へ遡る
 // session が分かっていれば、その id で探した scratchpad の folder の名前を使う。EnterWorktree した session は、起動した folder の名前の下に scratchpad を残して worktree へ移る
@@ -156,6 +158,9 @@ export default class Scratchpad extends View {
     this.handle.focus();
     // 開いた直後の focus は dialog の表示に奪われる事があるので、もう一度取る
     cx.timer.after(600, () => this.handle.focus());
+    // Esc は app が key context の Overlay で overlay.close に束ねていて、on_key_down に届く前に dialog を閉じる。より深い key context に束ねた action で先に受ける
+    // herdr は keys を読み直すたびに全ての束ねを消すので、開くたびに束ね直す。render の中では束ねられない
+    try { cx.bind_keys([{ keystroke: "escape", action: "scratchpad_escape", context: "ScratchpadDialog" }]); } catch {}
     cx.timer.every(POLL, cx => this.refresh(cx));
     cx.spawn(async cx => {
       // 前に開いた時のコピーが残っている事がある (app が落ちた時など)
@@ -368,7 +373,8 @@ export default class Scratchpad extends View {
       else return;
       return cx.stop_propagation();
     }
-    if (e.key === "escape") { if (this.filter) this.search(false, cx); else closeOverlay(props().overlay); }
+    // preview のコードを押すと、focus はその Editor へ移る。その Esc では閉じずに、focus を一覧へ戻す
+    if (e.key === "escape") { if (this.filter) this.search(false, cx); else if (!this.handle.is_focused()) this.handle.focus(); else closeOverlay(props().overlay); }
     else if (e.key === "q") closeOverlay(props().overlay);
     else if (e.key === "/") this.search(true, cx);
     else if (e.key === "a") { this.all = !this.all; this.rescan(cx); cx.notify(); }
@@ -480,7 +486,8 @@ export default class Scratchpad extends View {
     const only = this.only(), mine = this.scope?.id ? "this session" : "this sandbox";
     const hint = `j/k move · / filter · a ${this.all ? "out/ only" : "all files"} · ${this.scope ? `s ${this.wide ? mine : "all sessions"} · ` : ""}${this.markdown || (this.picture && this.code) ? "m raw/rendered · " : ""}y copy path · p paste to prompt · r rescan · q close`;
     // dialog の枠は角丸だが、中身は角丸に切り抜かれない。背景も同じ丸みにして、角からはみ出させない
-    return v_flex().id("scratchpad").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
+    return v_flex().id("scratchpad").key_context("ScratchpadDialog").on_action("scratchpad_escape", (_e, cx) => this.key(ESCAPE, cx))
+      .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
       .size_full().min_h(0).rounded(10).bg(t.popover).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(10).items_center().border_b(1).border_color(t.border)
         .child(div().font_semibold().child("Scratchpad"))

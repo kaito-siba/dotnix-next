@@ -1,24 +1,56 @@
-// Inbox の dialog の 2 つ目の面。aw-secretary の commitment の TUI (aw-secretary commitments) を GUI にした物
-// 左に open の commitment を状態ごとに並べ、右に選んだ行の詳細を出す。読み書きは ./secretary.js を通す
+// Inbox の dialog の 2 つ目と 3 つ目の面。aw-secretary の commitment の TUI (aw-secretary commitments) を GUI にした物
+// 左に commitment を状態ごとに並べ、右に選んだ行の詳細を出す。読み書きは ./secretary.js を通す
+// mode が open の面は open な commitment を、closed の面は 30 日以内に閉じた commitment を並べる
 import { div } from "gpui-kit";
 import { v_flex, h_flex, v_virtual_list, VirtualListScrollHandle, Scrollbar, InputState, Input } from "gpui-base";
 import { merge } from "./secretary.js";
 
 const ROW = 27, HEAD = 30;
-const SECTIONS = [["candidate", "Candidates"], ["active", "Active"], ["waiting", "Waiting"], ["later", "Later"]];
-const STATUS = { candidate: "Candidate", active: "Active", waiting: "Waiting", later: "Later" };
+// closed の節の中は、aw-secretary が返す閉じた新しい順のまま並べる
+const SECTIONS = {
+  open: [["candidate", "Candidates"], ["active", "Active"], ["waiting", "Waiting"], ["later", "Later"]],
+  closed: [["expired", "Expired"], ["done", "Done"], ["rejected", "Rejected"]],
+};
+const STATUS = { candidate: "Candidate", active: "Active", waiting: "Waiting", later: "Later", done: "Done", rejected: "Rejected", expired: "Expired" };
+const DOT = { candidate: "accent", active: "done", done: "done", expired: "working" };
 const REASON = { triage: "triage", overdue: "overdue", due_soon: "due soon", maybe_done: "done?" };
+const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // 入力欄の使い道ごとの見出し
-const PROMPT = { due: "Due YYYY-MM-DD · empty clears it", memo: "Memo", title: "Title", source: "Add a source by its Slack or GitHub URL", correct: "Correction for the extract", filter: "Filter by title" };
-// w と l は、その状態と進行中を行き来する
-const TOGGLE = { w: "waiting", l: "later" };
+const PROMPT = { due: "Due · YYYY-MM-DD, M/D, today, tomorrow or ±N days · empty clears it", memo: "Memo", title: "Title", source: "Add a source by its Slack or GitHub URL", correct: "Correction for the extract", filter: "Filter by title" };
+const DECIDE = { a: "active", x: "rejected", w: "waiting", l: "later", d: "done" };
+// open の面の w と l は、その状態と進行中を行き来する
+const TOGGLE = new Set(["w", "l"]);
 // aw-secretary に書く key。collect の最中と、前の書き込みの答えを待っている間は受けない
-const WRITES = new Set([..."axwldtnTNfu"]);
+const WRITES = { open: new Set([..."axwldtnTNfu"]), closed: new Set([..."axwldtnTu"]) };
 export const WAITING = "Waiting for aw-secretary to answer the last change";
 export const COLLECTING = "aw-secretary is collecting. Press r after it finishes, then try again";
 
 // 2026-11-17T18:02:00+09:00 を 11/17 18:02 にする
 const stamp = at => `${at.slice(5, 10).replace("-", "/")} ${at.slice(11, 16)}`;
+// Date を 2026-11-22 にする。toISOString は UTC の日付になるので使わない
+const iso = day => `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+
+// 期限の入力を、その日の Date にする。空は期限を消す印の null、読めない時は undefined
+// 読む形は today、tomorrow、N 日後の N か +N、N 日前の -N、今年のその日の M/D か M-D、YYYY-MM-DD と YYYY/M/D。2/30 のような無い日は読めない
+// 日数は 4 桁まで。20261122 のような区切りの無い日付を、日数と読まない
+function dueDay(text) {
+  const v = text.trim().toLowerCase(), now = new Date();
+  if (!v) return null;
+  const days = v === "today" ? 0 : v === "tomorrow" ? 1 : /^[+-]?\d{1,4}$/.test(v) ? Number(v) : null;
+  if (days !== null) return new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
+  const md = v.match(/^(\d{1,2})[/-](\d{1,2})$/), ymd = v.match(/^(\d{4})([/-])(\d{1,2})\2(\d{1,2})$/);
+  const [y, m, d] = ymd ? [ymd[1], ymd[3], ymd[4]].map(Number) : md ? [now.getFullYear(), Number(md[1]), Number(md[2])] : [];
+  if (y === undefined) return undefined;
+  const day = new Date(y, m - 1, d);
+  return day.getFullYear() === y && day.getMonth() === m - 1 && day.getDate() === d ? day : undefined;
+}
+
+// 打っている期限の読み。Due → 2026-11-22 (Sun) のように下端に出す
+function dueHint(text) {
+  const day = dueDay(text);
+  return day === null ? "Empty clears the due" : day ? `Due → ${iso(day)} (${DAY[day.getDay()]})` : "Not a date yet";
+}
+
 // 発生源の種類ごとの件数。G2 S1 のように出す (TUI の source_badge と同じ)
 function badge(sources) {
   const n = { github: 0, slack: 0 };
@@ -27,17 +59,19 @@ function badge(sources) {
 }
 
 export class Commitments {
-  // owner は Inbox の View。focus を戻す handle と、下端の note と、Inbox の面の読み直しの印 (inboxStale) を持つ
-  constructor(owner, secretary) {
-    this.owner = owner; this.sec = secretary;
-    // view は GET /commitments?view=open の答えで、読めるまで null。stale は Inbox の面で書いた後の印で、この面を出す時に読み直す
+  // owner は Inbox の View。focus を戻す handle と、下端の note と、書いた後に他の面を古いと印す wrote を持つ
+  // mode は open か closed で、読む view と、書いた後に答えてもらう view の名前
+  constructor(owner, secretary, mode) {
+    this.owner = owner; this.sec = secretary; this.mode = mode;
+    // view は GET /commitments?view=<mode> の答えで、読めるまで null。stale は他の面で書いた後の印で、この面を出す時に読み直す
     this.view = null; this.error = null; this.stale = false;
     // GET /commitments/<id> の答え (notes と events)。書いた行の分は捨てて読み直す
     this.details = new Map();
     // sel は選んでいる commitment の id。選んでいた行が消えた後は、at の位置の行を選ぶ
     this.sel = null; this.at = 0; this.filter = "";
     // typing は入力欄の使い道 (PROMPT の key)。null は入力していない。target は入力欄を開いた時に選んでいた commitment の id で、決めた値はそこへ書く
-    this.typing = null; this.opening = null; this.target = null;
+    // typed は入力欄の字の写しで、下端に期限の読みを出すのに使う
+    this.typing = null; this.opening = null; this.target = null; this.typed = "";
     // 面の上に重ねる一覧: 開く発生源を選ぶ (choose) か、前回の朝レポートからの差分 (diff)
     this.overlay = null; this.unsure = false;
     this.scroll = VirtualListScrollHandle.new();
@@ -47,18 +81,22 @@ export class Commitments {
       const o = this.opening, v = this.input.value();
       this.opening = null;
       if (o && (v === o.value + o.key || v === o.key + o.value)) { this.input.set_value(o.value); return; }
+      this.typed = v;
       if (this.typing === "filter") this.refilter(v, cx);
+      // 読めなかった期限の訳は、打ち直したら消して読みに戻す
+      else if (this.typing === "due") { this.owner.note = null; cx.notify(); }
     });
     this.input.on("submit", (_e, cx) => this.submit(cx));
     this.input.on("blur", (_e, cx) => { if (this.typing) { this.typing = null; cx.notify(); } });
   }
 
-  // この面を出す時に呼ぶ
-  show(cx) { if (!this.view || this.stale) this.load(cx); }
+  // この面を出す時に呼ぶ。他の面で書いた後は、覚えている詳細も古い事があるので捨てる
+  show(cx) { if (this.stale) this.reload(cx); else if (!this.view) this.load(cx); }
 
+  // 読みの key は面ごとに分ける。Secretary の drop で、もう 1 つの面の読みを捨てない
   load(cx) {
     this.stale = false;
-    this.sec.read(cx, "open", "/commitments?view=open", (got, cx) => { this.take(got); this.reveal(); this.want(cx); });
+    this.sec.read(cx, this.mode, `/commitments?view=${this.mode}`, (got, cx) => { this.take(got); this.reveal(); this.want(cx); });
   }
 
   reload(cx) { this.details.clear(); this.load(cx); }
@@ -70,7 +108,7 @@ export class Commitments {
 
   rows() {
     const q = this.filter.toLowerCase(), items = (this.view?.items ?? []).filter(c => !q || c.title.toLowerCase().includes(q));
-    return SECTIONS.flatMap(([status, title]) => {
+    return SECTIONS[this.mode].flatMap(([status, title]) => {
       const list = items.filter(c => c.status === status);
       return list.length ? [{ key: `h:${status}`, head: title, n: list.length, status }, ...list.map(c => ({ key: `c:${c.id}`, item: c }))] : [];
     });
@@ -110,11 +148,12 @@ export class Commitments {
   // 選んでいる行の notes と events を読む。j/k で続けて動いた時は、止まった行の分だけを読む
   want(cx) {
     const c = this.selected()?.item;
-    if (!c || this.details.has(c.id)) return this.sec.drop("detail");
-    this.sec.read(cx, "detail", `/commitments/${c.id}`, got => { if (got.answer) this.details.set(c.id, got.answer); else this.error = got.error; });
+    const key = `${this.mode}:detail`;
+    if (!c || this.details.has(c.id)) return this.sec.drop(key);
+    this.sec.read(cx, key, `/commitments/${c.id}`, got => { if (got.answer) this.details.set(c.id, got.answer); else this.error = got.error; });
   }
 
-  // 書いて、答えの open の view で置き換える。Inbox の面の view は読み直す。答えを待つ間に Inbox の面へ移っていればすぐに、居なければその面を出す時に
+  // 書いて、答えのこの面の view で置き換える。他の面の view は読み直す。答えを待つ間にその面へ移っていればすぐに、居なければその面を出す時に
   write(cx, path, body, then) {
     if (this.view?.running) { this.owner.note = COLLECTING; return; }
     this.send(cx, path, body, then);
@@ -124,17 +163,30 @@ export class Commitments {
   send(cx, path, body, then) {
     const sent = this.sec.write(cx, path, body, (got, cx) => {
       if (this.owner.note === WAITING) this.owner.note = null;
-      this.owner.inboxStale = true;
-      if (this.owner.face === "inbox") this.owner.load(cx);
-      then?.(got, cx);
       this.take(got);
+      then?.(got, cx);
+      this.owner.wrote(cx, this);
       this.reveal();
       this.want(cx);
     });
     if (!sent) this.owner.note = WAITING;
   }
 
-  change(cx, c, body) { this.write(cx, `/commitments/${c.id}?view=open`, body, () => this.details.delete(c.id)); }
+  change(cx, c, body, then) { this.write(cx, `/commitments/${c.id}?view=${this.mode}`, body, (got, cx) => { this.details.delete(c.id); then?.(got, cx); }); }
+
+  // 状態を変えた行は別の節か別の面へ移るが、選ぶ位置はその場に残す。答えが来たら、押した時の一覧でその次の行を、無ければ前の行を選ぶ。どちらも消えていたら同じ位置の行を選ぶ
+  // 答えを待つ間に別の行を選んだ時と、状態が変わらなかった時は、その行を選んだままにする
+  decide(cx, c, status) {
+    const ids = () => this.rows().filter(r => !r.head).map(r => r.item.id);
+    const list = ids(), at = list.indexOf(c.id), near = [list[at + 1], list[at - 1]];
+    // sel が null で at の位置の行を選んでいる間も、答えが来た時に別の行へ移っていないかを見分けられるよう、押した行の id を持つ
+    this.sel = c.id;
+    this.change(cx, c, { status }, () => {
+      if (this.sel !== c.id || this.view?.items.find(x => x.id === c.id)?.status === c.status) return;
+      const now = ids();
+      this.sel = near.find(id => now.includes(id)) ?? now[Math.min(at, now.length - 1)] ?? null;
+    });
+  }
 
   // 入力欄を開く (使い道と、開いた key と、初めの値)、または閉じる
   type(mode, cx, key = null, value = "") {
@@ -143,7 +195,7 @@ export class Commitments {
     if (mode) {
       this.opening = key && { key, value };
       this.target = this.selected()?.item.id ?? null;
-      this.input.set_value(value);
+      this.input.set_value(value); this.typed = value;
       this.input.focus();
     } else if (was) this.owner.handle.focus();
     cx.notify();
@@ -151,15 +203,17 @@ export class Commitments {
 
   submit(cx) {
     const mode = this.typing, v = this.input.value().trim(), c = this.view?.items.find(c => c.id === this.target);
+    const day = mode === "due" ? dueDay(v) : null;
+    if (day === undefined) { this.owner.note = `Can't read "${v}" as a date. Type YYYY-MM-DD, M/D, today, tomorrow or ±N days`; cx.notify(); return; }
     this.type(null, cx);
-    if (mode === "source" && v) this.write(cx, "/sources?view=open", { url: v }, got => this.registered(got));
+    if (mode === "source" && v) this.write(cx, `/sources?view=${this.mode}`, { url: v }, got => this.registered(got));
     else if (mode === "filter") return;
-    // 入力している間に読み直して、その commitment が open でなくなった
-    else if (!c) this.owner.note = "The commitment was closed while you were typing. Nothing was saved";
-    else if (mode === "due") this.change(cx, c, { due: v || null });
+    // 入力している間に読み直して、その commitment がこの面の view から外れた
+    else if (!c) this.owner.note = `The commitment was ${this.mode === "open" ? "closed" : "reopened"} while you were typing. Nothing was saved`;
+    else if (mode === "due") this.change(cx, c, { due: day && iso(day) });
     else if (mode === "memo") this.change(cx, c, { notes: v || null });
     else if (mode === "title" && v) this.change(cx, c, { title: v });
-    else if (mode === "correct" && v) this.write(cx, `/commitments/${c.id}/corrections?view=open`, { text: v }, got => {
+    else if (mode === "correct" && v) this.write(cx, `/commitments/${c.id}/corrections?view=${this.mode}`, { text: v }, got => {
       if (got.answer) { this.owner.note = `Recorded. ${got.answer.reset ?? 0} raw items will be extracted again at the next extract`; this.details.delete(c.id); }
     });
   }
@@ -186,7 +240,7 @@ export class Commitments {
   diff(cx) {
     this.overlay = { kind: "diff", since: null, events: null, at: 0, scroll: VirtualListScrollHandle.new() };
     const shown = this.overlay;
-    this.sec.read(cx, "diff", "/events", got => {
+    this.sec.read(cx, `${this.mode}:diff`, "/events", got => {
       if (got.answer) Object.assign(shown, { since: got.answer.since, events: got.answer.events ?? [] });
       else Object.assign(shown, { events: [], error: got.error });
     });
@@ -201,7 +255,7 @@ export class Commitments {
       return;
     }
     // Inbox の面からも呼ぶので、この面の view の running では止めない
-    this.send(cx, "/undo?view=open", {}, got => {
+    this.send(cx, `/undo?view=${this.mode}`, {}, got => {
       const u = got.answer?.undone;
       this.unsure = !got.answer && (got.status === null || got.status < 300);
       // 答えには Slack の view も付くので、Inbox の面の Slack の行も置き換える
@@ -237,24 +291,22 @@ export class Commitments {
   // 面の key。使った時は true
   key(e, cx) {
     const shift = e.modifiers?.shift, k = shift && e.key.length === 1 ? e.key.toUpperCase() : e.key, c = this.selected()?.item;
+    const open = this.mode === "open", writes = WRITES[this.mode];
     if (k === "j" || k === "down") this.move(1, cx);
     else if (k === "k" || k === "up") this.move(-1, cx);
     else if (k === "r") this.reload(cx);
     else if (k === "/") this.type("filter", cx, "/", this.filter);
     else if (k === "D") this.diff(cx);
-    else if (WRITES.has(k) && this.view?.running) this.owner.note = COLLECTING;
-    else if (WRITES.has(k) && this.sec.waiting()) this.owner.note = WAITING;
+    else if (writes.has(k) && this.view?.running) this.owner.note = COLLECTING;
+    else if (writes.has(k) && this.sec.waiting()) this.owner.note = WAITING;
     else if (k === "u") this.undo(cx);
-    else if (k === "N") this.type("source", cx, "N");
+    else if (k === "N" && open) this.type("source", cx, "N");
     else if (!c) return false;
-    else if (k === "a") this.change(cx, c, { status: "active" });
-    else if (k === "x") this.change(cx, c, { status: "rejected" });
-    else if (k === "w" || k === "l") this.change(cx, c, { status: c.status === TOGGLE[k] ? "active" : TOGGLE[k] });
-    else if (k === "d") this.change(cx, c, { status: "done" });
+    else if (Object.hasOwn(DECIDE, k)) this.decide(cx, c, open && TOGGLE.has(k) && c.status === DECIDE[k] ? "active" : DECIDE[k]);
     else if (k === "t") this.type("due", cx, "t", c.due ?? "");
     else if (k === "n") this.type("memo", cx, "n", this.notes(c) ?? "");
     else if (k === "T") this.type("title", cx, "T", c.title);
-    else if (k === "f") this.type("correct", cx, "f");
+    else if (k === "f" && open) this.type("correct", cx, "f");
     else if (k === "o" || k === "enter") this.open(cx, c);
     else return false;
     return true;
@@ -262,15 +314,17 @@ export class Commitments {
 
   // 下端の key の案内。面と、選んでいる行と、入力欄に合わせる
   hint() {
-    const o = this.overlay, c = this.selected()?.item;
+    const o = this.overlay, c = this.selected()?.item, open = this.mode === "open";
     if (this.typing === "filter") return "type to filter · ↑/↓ move · Enter keep · Esc clear";
+    if (this.typing === "due") return `${dueHint(this.typed)} · Enter save · Esc cancel`;
     if (this.typing) return `${PROMPT[this.typing]} · Enter save · Esc cancel`;
     if (o?.kind === "choose") return "1-9 or j/k + Enter open · Esc cancel";
     if (o?.kind === "diff") return "j/k scroll · Esc back";
     const tail = ["D diff", "u undo", "/ filter", "r reload", "Tab face", "Esc close"];
     if (this.view?.running) return ["j/k move", "o open", "changes wait until aw-secretary finishes collecting, then r", ...tail].join(" · ");
-    if (!c) return ["N new source", ...tail].join(" · ");
-    const toggle = k => c.status === TOGGLE[k] ? `${k} active` : `${k} ${TOGGLE[k]}`;
+    if (!c) return [...open ? ["N new source"] : [], ...tail].join(" · ");
+    if (!open) return ["j/k move", "a active", "w waiting", "l later", "d done", "x reject", "t due", "n memo", "T title", "o open", ...tail].join(" · ");
+    const toggle = k => c.status === DECIDE[k] ? `${k} active` : `${k} ${DECIDE[k]}`;
     return ["j/k move", "a adopt", "x reject", toggle("w"), toggle("l"), "d done", "t due", "n memo", "T title", "N new source", "f correct", "o open", ...tail].join(" · ");
   }
 
@@ -281,7 +335,7 @@ export class Commitments {
 
   dot(t, status) {
     const d = div().size(8).flex_none().rounded(4);
-    return status === "waiting" ? d.border_1().border_color(t.muted) : d.bg(status === "candidate" ? t.accent : status === "active" ? t.done : t.border);
+    return status === "waiting" ? d.border_1().border_color(t.muted) : d.bg(t[DOT[status] ?? "border"]);
   }
 
   // virtual list の renderer の中では on_click 等の handler を登録できない。click は list 側の on_item_click で受ける
@@ -295,7 +349,9 @@ export class Commitments {
       .child(div().flex_1().min_w(0).truncate().child(c.title))
       .when(c.reason === "maybe_done", el => el.child(div().flex_none().text_size(11).text_color(t.done).child("✓?")))
       .child(div().flex_none().text_size(10.5).text_color(t.dim).child(badge(c.sources)))
-      .when(Boolean(c.due), el => el.child(div().flex_none().text_size(11)
+      // 閉じた行は期限の代わりに閉じた日を出す。期限は詳細に出す
+      .when(this.mode === "closed" && Boolean(c.closedAt), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child(c.closedAt.slice(5, 10).replace("-", "/"))))
+      .when(this.mode === "open" && Boolean(c.due), el => el.child(div().flex_none().text_size(11)
         .text_color(c.reason === "overdue" ? t.blocked : c.reason === "due_soon" ? t.working : t.dim)
         .child(`〆${c.due.slice(5).replace("-", "/")}${c.reason === "overdue" ? " overdue" : ""}`)));
   }
@@ -312,12 +368,12 @@ export class Commitments {
 
   detail(t, c) {
     const d = c ? this.details.get(c.id) : null, notes = c && this.notes(c);
-    const meta = c && [`#${c.id}`, STATUS[c.status], c.due && `〆${c.due}`, REASON[c.reason]].filter(Boolean).join(" · ");
+    const meta = c && [`#${c.id}`, STATUS[c.status], c.due && `〆${c.due}`, REASON[c.reason], c.closedAt && `closed ${stamp(c.closedAt)}`].filter(Boolean).join(" · ");
     // 詳細の欄は dialog の幅の 4 割で、狭い時も 320px は取る。幅と地は scroll する要素の外の枠に付ける: overflow_y_scrollbar の要素に割合の幅を付けると、中身の側にも同じ割合が掛かり、地が狭く塗られる
     // 入力欄は scroll する要素の外に置く。詳細を下まで scroll していても見える
     return v_flex().w_2_5().min_w(320).flex_none().border_l(1).border_color(t.border).bg(t.surface)
       .when(Boolean(this.typing) && this.typing !== "filter", el => el.child(this.field(t).px(14).pt(12)))
-      .child(v_flex().id("cm-detail").flex_1().min_h(0).overflow_y_scrollbar().px(14).py(12).gap(12)
+      .child(v_flex().id(`cm-${this.mode}-detail`).flex_1().min_h(0).overflow_y_scrollbar().px(14).py(12).gap(12)
         .when(!c, el => el.child(div().text_color(t.dim).child(this.view ? "No commitment selected" : "")))
         .when(Boolean(c), el => el
           .child(v_flex().flex_none().gap(4).child(div().text_size(15).font_semibold().child(c.title)).child(div().text_size(11).text_color(t.dim).child(meta)))
@@ -345,24 +401,25 @@ export class Commitments {
       o.events === null ? div().text_color(t.dim).child("Loading…")
         : !events.length ? div().text_color(t.dim).child(o.error ?? "No changes")
         : div().h(Math.min(events.length, 14) * ROW).relative()
-          .child(v_virtual_list("cm-diff", events.length, ROW, i => `e${i}`, range => events.slice(range.start, range.end).map((e, j) => h_flex().h(ROW).px(8).gap(10).items_center().rounded(6)
+          .child(v_virtual_list(`cm-${this.mode}-diff`, events.length, ROW, i => `e${i}`, range => events.slice(range.start, range.end).map((e, j) => h_flex().h(ROW).px(8).gap(10).items_center().rounded(6)
             .when(range.start + j === o.at, el => el.bg(t.selected))
             .child(div().flex_none().text_size(10.5).text_color(t.dim).child(stamp(e.at)))
             .child(div().flex_none().text_size(11).text_color(t.muted).child(e.kind))
             .child(div().flex_1().min_w(0).truncate().child(`${e.title ?? ""}${e.detail ? ` · ${e.detail}` : ""}`))))
             .track_scroll(o.scroll).size_full())
-          .child(Scrollbar.vertical("cm-diff").absolute().inset_0()));
+          .child(Scrollbar.vertical(`cm-${this.mode}-diff`).absolute().inset_0()));
   }
 
+  // 要素の id は面ごとに分ける。同じ id の要素は、面を移っても scroll の位置を引き継ぐ
   render(t, handle) {
     const rows = this.rows(), sel = this.selected(rows);
     const list = this.view === null ? div().p(16).text_color(t.dim).child(this.error ?? "Loading…")
-      : !rows.length ? div().p(16).text_color(t.dim).child(this.filter ? "No commitment matches the filter" : "No open commitments")
+      : !rows.length ? div().p(16).text_color(t.dim).child(this.filter ? "No commitment matches the filter" : this.mode === "open" ? "No open commitments" : "No commitments closed in the last 30 days")
       : div().flex_1().min_h(0).relative()
-        .child(v_virtual_list("cm-list", rows.length, rows.map(r => r.head ? HEAD : ROW), i => rows[i].key, range => rows.slice(range.start, range.end).map(r => this.line(t, r, r === sel)))
+        .child(v_virtual_list(`cm-${this.mode}-list`, rows.length, rows.map(r => r.head ? HEAD : ROW), i => rows[i].key, range => rows.slice(range.start, range.end).map(r => this.line(t, r, r === sel)))
           .track_scroll(this.scroll).size_full().px(6).pb(6)
           .on_item_click((key, cx) => { const r = rows.find(r => r.key === key); if (r?.item) { this.sel = r.item.id; this.want(cx); } handle.focus(); cx.notify(); }))
-        .child(Scrollbar.vertical("cm-list").absolute().inset_0());
+        .child(Scrollbar.vertical(`cm-${this.mode}-list`).absolute().inset_0());
     // 一覧と詳細の並べ方は explorer と pr の mod に揃える。h_flex は既定で子を縦の真ん中に置き、中身の高さに縮める。items_start で真ん中に置くのをやめ、h_full で縦いっぱいにする。virtual list は高さが決まらないと描けない
     return h_flex().flex_1().min_h(0).items_start().relative()
       .child(v_flex().flex_1().min_w(0).h_full()
