@@ -36,6 +36,7 @@ const byHost = list => [...(list ?? []).reduce((hosts, e) => {
   const was = hosts.get(e.host);
   return hosts.set(e.host, !was ? e : { ...was, count: was.count + e.count, last_seen: Date.parse(e.last_seen) > Date.parse(was.last_seen) ? e.last_seen : was.last_seen });
 }, new Map()).values()];
+const portless = target => target.replace(/:\d+$/, "");
 
 export default class Sandbox extends View {
   init(_props, cx) {
@@ -248,13 +249,32 @@ export default class Sandbox extends View {
     const rules = net.rules.filter(r => r.resource_type === "network");
     const granted = new Set(rules.filter(r => r.decision === "allow" && r.status === "active").flatMap(r => r.resources));
     const passed = new Map((net.log.allowed ?? []).map(a => [a.host, time(a.last_seen)]));
+    // DNS で止められた lookup は port を持たない。DNS は port を見ず、その名前のどれかの port を許す rule があれば引ける。引けた lookup は log に残らないので、後でその名前のどれかの port に繋がった記録で見る
+    const named = new Set([...granted].map(portless));
+    const reached = name => Math.max(0, ...[...passed].filter(([host]) => portless(host) === name).map(([, at]) => at));
+    // sandbox の resolv.conf は search に <sandbox>.docker.internal を持つので、1 回の lookup で X と X.<sandbox>.docker.internal の両方が止められ、approval も両方に出る。後者は X の行にまとめる
+    const suffix = `.${this.name}.docker.internal`;
+    const lookup = target => { const name = portless(target); return name.endsWith(suffix) ? name.slice(0, -suffix.length) : name; };
     const hosts = new Map();
-    for (const b of net.log.blocked ?? []) hosts.set(b.host, { host: b.host, count: b.count, last: time(b.last_seen), reason: b.reason });
-    for (const a of net.pending) hosts.set(a.title, { ...(hosts.get(a.title) ?? { host: a.title, count: 0, last: time(a.created_at) }), approval: a });
+    const entry = (target, dns) => {
+      const host = dns ? lookup(target) : target, id = dns ? `dns:${host}` : host;
+      if (!hosts.has(id)) hosts.set(id, { id, host, dns, count: 0, last: 0, approvals: [] });
+      return hosts.get(id);
+    };
+    for (const b of net.log.blocked ?? []) {
+      const h = entry(b.host, b.reason?.startsWith("DNS lookup"));
+      // X と X.<sandbox>.docker.internal の記録は同じ lookup から出るので、回数は足さない
+      h.count = Math.max(h.count, b.count); h.last = Math.max(h.last, time(b.last_seen));
+    }
+    for (const a of net.pending) {
+      const h = entry(a.title, a.detail?.includes("DNS resolution"));
+      h.approvals.push(a);
+      if (!h.count) h.last = Math.max(h.last, time(a.created_at));
+    }
     const order = { pending: 0, blocked: 1, allowed: 2 };
+    const open = h => h.dns ? named.has(h.host) || reached(h.host) > h.last : granted.has(h.host) || granted.has(portless(h.host)) || (passed.get(h.host) ?? 0) > h.last;
     const blocked = [...hosts.values()].filter(h => match(h.host)).map(h => ({
-      ...h, key: `b:${h.host}`,
-      state: granted.has(h.host) || granted.has(h.host.replace(/:\d+$/, "")) || (passed.get(h.host) ?? 0) > h.last ? "allowed" : h.approval ? "pending" : "blocked",
+      ...h, key: `b:${h.id}`, state: open(h) ? "allowed" : h.approvals.length ? "pending" : "blocked",
     })).sort((a, b) => order[a.state] - order[b.state] || b.last - a.last);
     const allowed = (net.log.allowed ?? []).filter(a => match(a.host)).map(a => ({ key: `a:${a.host}`, pass: a, last: time(a.last_seen) })).sort((a, b) => b.last - a.last);
     const listed = rules.filter(r => match(r.resources.join(" "))).map(r => ({ key: `r:${r.id}`, rule: r, own: r.editable && r.scope === `sandbox:${this.name}` }));
@@ -263,30 +283,35 @@ export default class Sandbox extends View {
   }
 
   // この sandbox だけに許可する。許可待ちの物は approval に答え (中で待っている通信がそのまま通る)、他は sandbox に絞った allow rule を足す
+  // DNS の行は port が分からないので、sbx の approval と同じく 443 を許す。他の port は、繋ぎに行った時に別の行で出る
   allow(rows, cx) {
     const todo = rows.filter(r => r.host && r.state !== "allowed");
     if (!todo.length) return;
+    const target = r => r.dns ? `${r.host}:443` : r.host;
     this.load(cx, "allow", async (cx, name) => {
       const failed = [];
       for (const r of todo) {
         try {
-          if (r.approval) await this.sbx(["policy", "approval", "respond", r.approval.id, "--option", "allow"]);
-          else await this.sbx(["policy", "allow", "network", "--sandbox", name, r.host]);
-        } catch (e) { failed.push(`${r.host}: ${e.message}`); }
+          const answer = r.approvals.find(a => a.title === target(r));
+          if (answer) await this.sbx(["policy", "approval", "respond", answer.id, "--option", "allow"]);
+          else await this.sbx(["policy", "allow", "network", "--sandbox", name, target(r)]);
+          // X.<sandbox>.docker.internal の approval に allow で答えると、その名前の rule ができる
+          for (const a of r.approvals.filter(a => a !== answer)) await this.sbx(["policy", "approval", "respond", a.id, "--option", "dismiss"]);
+        } catch (e) { failed.push(`${target(r)}: ${e.message}`); }
       }
       if (failed.length) notify({ title: "Sandbox", body: failed.join("\n"), level: "error" });
-      else notify({ title: `Allowed for ${name}`, body: todo.map(r => r.host).join(", "), level: "success" });
+      else notify({ title: `Allowed for ${name}`, body: todo.map(target).join(", "), level: "success" });
       this.loadNet(cx);
     });
   }
 
   // 許可待ちを断るか、この sandbox の rule を消す
   revoke(row, cx) {
-    const args = row.approval && row.state === "pending" ? ["policy", "approval", "respond", row.approval.id, "--option", "dismiss"]
-      : row.own ? ["policy", "rm", "network", "--sandbox", this.name, "--id", row.rule.id] : null;
-    if (!args) return;
+    const todo = row.state === "pending" ? row.approvals.map(a => ["policy", "approval", "respond", a.id, "--option", "dismiss"])
+      : row.own ? [["policy", "rm", "network", "--sandbox", this.name, "--id", row.rule.id]] : [];
+    if (!todo.length) return;
     this.load(cx, "allow", async cx => {
-      try { await this.sbx(args); }
+      try { for (const args of todo) await this.sbx(args); }
       catch (e) { notify({ title: "Sandbox", body: String(e.message), level: "error" }); }
       this.loadNet(cx);
     });
@@ -453,6 +478,7 @@ export default class Sandbox extends View {
         : r.host ? this.line(t, r === sel)
           .child(div().w(8).h(8).flex_none().rounded(4).bg(color[r.state]))
           .child(div().flex_1().min_w(0).truncate().child(r.host))
+          .when(Boolean(r.dns), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child("DNS")))
           .child(div().flex_none().text_size(11).text_color(color[r.state]).child(label[r.state]))
           .child(div().w(50).flex_none().text_size(11).text_color(t.dim).child(r.count ? `×${r.count}` : ""))
           .child(div().w(26).flex_none().text_size(11).text_color(t.dim).child(ago(r.last)))
