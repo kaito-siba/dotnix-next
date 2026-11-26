@@ -31,6 +31,11 @@ function location() {
 const inside = w => w.split(":")[1] ?? w;
 const within = (dir, path) => path === dir || path?.startsWith(dir.replace(/\/$/, "") + "/");
 const last = text => text.trim().split("\n").pop();
+// sbx policy log は同じ host を、forward や transparent のような proxy の種類ごとに別の記録で返す。Network の行の key は host から作り、virtual list は同じ key の行が画面に並ぶと 1 行も描かないので、host ごとにまとめる
+const byHost = list => [...(list ?? []).reduce((hosts, e) => {
+  const was = hosts.get(e.host);
+  return hosts.set(e.host, !was ? e : { ...was, count: was.count + e.count, last_seen: Date.parse(e.last_seen) > Date.parse(was.last_seen) ? e.last_seen : was.last_seen });
+}, new Map()).values()];
 
 export default class Sandbox extends View {
   init(_props, cx) {
@@ -224,9 +229,10 @@ export default class Sandbox extends View {
         this.sbx(["policy", "approval", "ls", "--json"]), this.sbx(["policy", "log", name, "--json"]), this.sbx(["policy", "ls", name, "--json", "--type", "network"]),
       ]);
       if (name !== this.name) return;
+      const { allowed, blocked } = JSON.parse(log) ?? {};
       this.net = {
         pending: (JSON.parse(approvals) ?? []).filter(a => a.sandbox_name === name),
-        log: JSON.parse(log) ?? {}, rules: JSON.parse(rules)?.rules ?? [],
+        log: { allowed: byHost(allowed), blocked: byHost(blocked) }, rules: JSON.parse(rules)?.rules ?? [],
       };
     });
   }
